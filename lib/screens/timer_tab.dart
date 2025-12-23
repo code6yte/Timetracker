@@ -1,6 +1,7 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
+import 'dart:async';
 import '../services/time_tracker_service.dart';
+import '../models/task.dart';
 import '../models/time_entry.dart';
 import '../widgets/glass_container.dart';
 
@@ -11,277 +12,373 @@ class TimerTab extends StatefulWidget {
   State<TimerTab> createState() => _TimerTabState();
 }
 
-class _TimerTabState extends State<TimerTab> {
+class _TimerTabState extends State<TimerTab>
+    with SingleTickerProviderStateMixin {
+  late TabController _tabController;
   final TimeTrackerService _service = TimeTrackerService();
-  Timer? _timer;
-  int _elapsedSeconds = 0;
-  TimeEntry? _currentEntry;
+
+  // Running entry state (persistent)
+  TimeEntry? _runningEntry;
+  Timer? _runningUpdateTimer; // updates elapsed/remaining display
+
+  // Selected tasks for controls
+  Task? _selectedTask;
+  Task? _focusTask;
+
+  // Local UI state for focus countdown when expectedDuration is set
+  int _displaySeconds =
+      0; // shows elapsed (stopwatch) or remaining (focus) depending on _runningEntry.expectedDuration
+  bool get _isRunning => _runningEntry != null;
 
   @override
-  void dispose() {
-    _timer?.cancel();
-    super.dispose();
-  }
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 2, vsync: this);
 
-  void _startTimerCounter(DateTime startTime) {
-    _timer?.cancel();
-    _elapsedSeconds = DateTime.now().difference(startTime).inSeconds;
-
-    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (mounted) {
-        setState(() {
-          _elapsedSeconds++;
-        });
-      }
+    // Listen for any running timer persisted in Firestore
+    _service.getRunningTimer().listen((entry) {
+      setState(() {
+        _runningEntry = entry;
+      });
+      _startRunningUpdateTimer();
     });
   }
 
-  void _stopTimerCounter() {
-    _timer?.cancel();
-    _elapsedSeconds = 0;
+  @override
+  void dispose() {
+    _runningUpdateTimer?.cancel();
+    _tabController.dispose();
+    super.dispose();
   }
 
-  String _formatDuration(int seconds) {
-    final hours = seconds ~/ 3600;
-    final minutes = (seconds % 3600) ~/ 60;
-    final secs = seconds % 60;
-    return '${hours.toString().padLeft(2, '0')}:${minutes.toString().padLeft(2, '0')}:${secs.toString().padLeft(2, '0')}';
+  // --- Shared Helpers ---
+  String _formatTime(int seconds) {
+    int m = seconds ~/ 60;
+    int s = seconds % 60;
+    return '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
   }
 
-  void _showTaskSelectionDialog() async {
-    final tasks = await _service.getTasks().first;
-
-    if (!mounted) return;
-
-    if (tasks.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please create a task first')),
-      );
-      return;
+  Color _getAccentColor(Task? task) {
+    if (task == null || task.color.isEmpty) return Colors.amberAccent;
+    try {
+      return Color(int.parse(task.color.replaceFirst('#', '0xFF')));
+    } catch (_) {
+      return Colors.amberAccent;
     }
+  }
 
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Select Task'),
-        content: SizedBox(
-          width: double.maxFinite,
-          child: ListView.builder(
-            shrinkWrap: true,
-            itemCount: tasks.length,
-            itemBuilder: (context, index) {
-              final task = tasks[index];
-              return ListTile(
-                leading: Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    color: Color(
-                      int.parse(task.color.replaceFirst('#', '0xFF')),
-                    ),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                ),
-                title: Text(task.title),
-                subtitle: Text(task.category),
-                onTap: () async {
-                  Navigator.pop(context);
-                  await _service.startTimer(task.id, task.title, task.category);
-                  if (!context.mounted) return;
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Timer started for ${task.title}')),
-                  );
-                },
-              );
-            },
+  void _startRunningUpdateTimer() {
+    _runningUpdateTimer?.cancel();
+    if (_runningEntry == null) return;
+    _runningUpdateTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted) return;
+      setState(() {
+        final elapsed = DateTime.now()
+            .difference(_runningEntry!.startTime)
+            .inSeconds;
+        if (_runningEntry!.expectedDuration != null) {
+          _displaySeconds = (_runningEntry!.expectedDuration! - elapsed).clamp(
+            0,
+            _runningEntry!.expectedDuration!,
+          );
+          if (_displaySeconds == 0) {
+            _runningUpdateTimer?.cancel();
+            _handleFocusCompletion();
+          }
+        } else {
+          _displaySeconds = elapsed;
+        }
+      });
+    });
+  }
+
+  // --- Stopwatch / Focus Logic now backed by persistent running entry ---
+  void _toggleStopwatch() async {
+    if (_isRunning && _runningEntry?.expectedDuration == null) {
+      // Stop persistent running timer
+      await _service.stopTimer(_runningEntry!.id);
+    } else {
+      if (_selectedTask == null) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Select a task first')));
+        return;
+      }
+      await _service.startTimer(
+        _selectedTask!.id,
+        _selectedTask!.title,
+        _selectedTask!.projectId.isNotEmpty
+            ? _selectedTask!.projectId
+            : 'Inbox',
+      );
+    }
+  }
+
+  void _toggleFocus() async {
+    if (_isRunning && _runningEntry?.expectedDuration != null) {
+      // Stop focus
+      await _service.stopTimer(_runningEntry!.id);
+    } else {
+      if (_focusTask == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Select a task for focus session')),
+        );
+        return;
+      }
+      // Start focus with expected duration of 25 minutes
+      await _service.startTimer(
+        _focusTask!.id,
+        _focusTask!.title,
+        _focusTask!.projectId.isNotEmpty ? _focusTask!.projectId : 'Inbox',
+        expectedDuration: 25 * 60,
+        source: 'focus',
+      );
+    }
+  }
+
+  Future<void> _handleFocusCompletion() async {
+    // Called when countdown reaches zero
+    if (_runningEntry != null && _runningEntry!.expectedDuration != null) {
+      try {
+        await _service.stopTimer(_runningEntry!.id);
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Focus Session Complete & Logged!')),
+        );
+      } catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to stop focus session: $e')),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      appBar: AppBar(
+        title: const Text(
+          'Timer & Focus',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        centerTitle: true,
+        bottom: TabBar(
+          controller: _tabController,
+          indicatorColor: Colors.amberAccent,
+          indicatorWeight: 4,
+          labelColor: Colors.amberAccent,
+          unselectedLabelColor: Colors.white70,
+          labelStyle: const TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 16,
           ),
+          tabs: const [
+            Tab(text: 'Stopwatch'),
+            Tab(text: 'Focus'),
+          ],
+        ),
+      ),
+      body: TabBarView(
+        controller: _tabController,
+        children: [
+          _buildTimerView(
+            isStopwatch: true,
+            seconds:
+                (_runningEntry != null &&
+                    _runningEntry!.expectedDuration == null)
+                ? _displaySeconds
+                : _displaySeconds,
+            isRunning:
+                (_runningEntry != null &&
+                _runningEntry!.expectedDuration == null),
+            onToggle: _toggleStopwatch,
+            task: _selectedTask,
+            onTaskChanged: (t) => setState(() => _selectedTask = t),
+          ),
+          _buildTimerView(
+            isStopwatch: false,
+            seconds:
+                (_runningEntry != null &&
+                    _runningEntry!.expectedDuration != null)
+                ? _displaySeconds
+                : _displaySeconds,
+            isRunning:
+                (_runningEntry != null &&
+                _runningEntry!.expectedDuration != null),
+            onToggle: _toggleFocus,
+            task: _focusTask,
+            onTaskChanged: (t) => setState(() => _focusTask = t),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTimerView({
+    required bool isStopwatch,
+    required int seconds,
+    required bool isRunning,
+    required VoidCallback onToggle,
+    required Task? task,
+    required Function(Task?) onTaskChanged,
+  }) {
+    final accentColor = _getAccentColor(task);
+
+    return SingleChildScrollView(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        child: Column(
+          children: [
+            _buildTaskSelector(onTaskChanged, task),
+            const SizedBox(height: 12),
+            if (!isStopwatch) ...[
+              const SizedBox(height: 8),
+              SizedBox(
+                width: 240, // Slightly smaller ring
+                height: 240,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    SizedBox.expand(
+                      child: CircularProgressIndicator(
+                        value: seconds / (25 * 60),
+                        strokeWidth: 12,
+                        valueColor: AlwaysStoppedAnimation<Color>(accentColor),
+                        backgroundColor: Colors.white.withAlpha(
+                          (0.05 * 255).toInt(),
+                        ),
+                        strokeCap: StrokeCap.round,
+                      ),
+                    ),
+                    Text(
+                      _formatTime(seconds),
+                      style: const TextStyle(
+                        fontSize: 64, // Slightly smaller text
+                        fontWeight: FontWeight.w200,
+                        color: Colors.white,
+                        letterSpacing: -2,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ] else ...[
+              Text(
+                _formatTime(seconds),
+                style: const TextStyle(
+                  fontSize: 84, // Slightly smaller text
+                  fontWeight: FontWeight.w200,
+                  color: Colors.white,
+                  letterSpacing: -4,
+                ),
+              ),
+            ],
+            const SizedBox(height: 20),
+            _buildActionButton(isRunning, onToggle, accentColor),
+          ],
         ),
       ),
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return StreamBuilder<TimeEntry?>(
-      stream: _service.getRunningTimer(),
-      builder: (context, snapshot) {
-        final runningTimer = snapshot.data;
-
-        if (runningTimer != null && _currentEntry?.id != runningTimer.id) {
-          _currentEntry = runningTimer;
-          _startTimerCounter(runningTimer.startTime);
-        } else if (runningTimer == null && _currentEntry != null) {
-          _stopTimerCounter();
-          _currentEntry = null;
-        }
-
-        return Scaffold(
-          backgroundColor: Colors.transparent,
-          body: Center(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(24, 24, 24, 100),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  if (runningTimer != null) ...[
-                    GlassContainer(
-                      padding: const EdgeInsets.all(32),
-                      color: Colors.blue,
-                      opacity: 0.3,
-                      child: Column(
-                        children: [
-                          const Icon(
-                            Icons.timer,
-                            size: 64,
-                            color: Colors.white,
-                          ),
-                          const SizedBox(height: 16),
-                          Text(
-                            runningTimer.taskTitle,
-                            style: const TextStyle(
-                              fontSize: 24,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
-                            ),
-                            textAlign: TextAlign.center,
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            runningTimer.category,
-                            style: const TextStyle(
-                              fontSize: 16,
-                              color: Colors.white70,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 32),
-                    Text(
-                      _formatDuration(_elapsedSeconds),
-                      style: const TextStyle(
-                        fontSize: 64,
-                        fontWeight: FontWeight.bold,
-                        fontFamily: 'monospace',
-                        color: Colors.white,
-                        shadows: [
-                          Shadow(
-                            blurRadius: 10.0,
-                            color: Colors.black26,
-                            offset: Offset(2.0, 2.0),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 48),
-                    ElevatedButton.icon(
-                      onPressed: () async {
-                        await _service.stopTimer(runningTimer.id);
-                        if (!context.mounted) return;
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Timer stopped')),
-                        );
-                      },
-                      icon: const Icon(Icons.stop, size: 28),
-                      label: const Text(
-                        'Stop Timer',
-                        style: TextStyle(fontSize: 18),
-                      ),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.redAccent.withOpacity(0.8),
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 32,
-                          vertical: 16,
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        elevation: 0,
-                      ),
-                    ),
-                  ] else ...[
-                    Icon(Icons.timer_off, size: 120, color: Colors.white24),
-                    const SizedBox(height: 24),
-                    const Text(
-                      'No Timer Running',
-                      style: TextStyle(fontSize: 24, color: Colors.white70),
-                    ),
-                    const SizedBox(height: 16),
-                    const Text(
-                      'Start tracking your time',
-                      style: TextStyle(fontSize: 16, color: Colors.white54),
-                    ),
-                    const SizedBox(height: 48),
-                    ElevatedButton.icon(
-                      onPressed: _showTaskSelectionDialog,
-                      icon: const Icon(Icons.play_arrow, size: 28),
-                      label: const Text(
-                        'Start Timer',
-                        style: TextStyle(fontSize: 18),
-                      ),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.white,
-                        foregroundColor: Colors.blue,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 32,
-                          vertical: 16,
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        elevation: 0,
-                      ),
-                    ),
-                  ],
-                  const SizedBox(height: 32),
-                  _buildTodaysSummary(),
-                ],
-              ),
+  Widget _buildActionButton(bool isRunning, VoidCallback onTap, Color color) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 72, // Slightly smaller button
+        height: 72,
+        decoration: BoxDecoration(
+          color: isRunning ? Colors.redAccent : color,
+          shape: BoxShape.circle,
+          boxShadow: [
+            BoxShadow(
+              color: isRunning
+                  ? Colors.redAccent.withAlpha((0.4 * 255).toInt())
+                  : color.withAlpha((0.4 * 255).toInt()),
+              blurRadius: 20,
+              spreadRadius: 2,
             ),
-          ),
-        );
-      },
+          ],
+        ),
+        child: Icon(
+          isRunning ? Icons.stop_rounded : Icons.play_arrow_rounded,
+          size: 40,
+          color: isRunning ? Colors.white : Colors.black,
+        ),
+      ),
     );
   }
 
-  Widget _buildTodaysSummary() {
-    return StreamBuilder<List<TimeEntry>>(
-      stream: _service.getTodayEntries(),
+  Widget _buildTaskSelector(Function(Task?) onChanged, Task? currentValue) {
+    return StreamBuilder<List<Task>>(
+      stream: _service.getTasks(),
       builder: (context, snapshot) {
-        final entries = snapshot.data ?? [];
-        final totalSeconds = entries.fold<int>(
-          0,
-          (sum, entry) => sum + entry.duration,
-        );
+        if (!snapshot.hasData) return const SizedBox(height: 56);
+        final tasks = snapshot.data!;
+        // Deduplicate tasks by id to avoid multiple DropdownMenuItems with same value
+        final Map<String, Task> uniqueById = {};
+        for (var t in tasks) {
+          uniqueById[t.id] = t;
+        }
+        final uniqueTasks = uniqueById.values.toList();
+
+        // Ensure the currently selected value references one of the items
+        Task? selectedValue;
+        if (currentValue != null) {
+          final matches = uniqueTasks.where((t) => t.id == currentValue.id);
+          selectedValue = matches.isNotEmpty ? matches.first : null;
+        }
 
         return GlassContainer(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            children: [
-              const Text(
-                'Today\'s Total',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                ),
+          borderRadius: BorderRadius.circular(20),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<Task>(
+              value: selectedValue,
+              hint: const Text(
+                'Select a Task',
+                style: TextStyle(color: Colors.white60),
               ),
-              const SizedBox(height: 8),
-              Text(
-                _formatDuration(totalSeconds),
-                style: const TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                ),
+              dropdownColor: const Color(0xFF121212),
+              icon: const Icon(
+                Icons.keyboard_arrow_down,
+                color: Colors.white70,
               ),
-              const SizedBox(height: 4),
-              Text(
-                '${entries.length} session${entries.length != 1 ? 's' : ''}',
-                style: const TextStyle(color: Colors.white70),
-              ),
-            ],
+              isExpanded: true,
+              style: const TextStyle(color: Colors.white, fontSize: 16),
+              items: uniqueTasks
+                  .map(
+                    (t) => DropdownMenuItem(
+                      value: t,
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 10,
+                            height: 10,
+                            decoration: BoxDecoration(
+                              color: _getAccentColor(t),
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              t.title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  )
+                  .toList(),
+              onChanged: _isRunning ? null : onChanged,
+            ),
           ),
         );
       },

@@ -3,7 +3,8 @@ class Task {
   final String userId;
   final String title;
   final String description;
-  final String category;
+  final String projectId;
+  final String category; // Kept for legacy display compatibility
   final String color;
   final DateTime createdAt;
   final bool isActive;
@@ -13,6 +14,7 @@ class Task {
     required this.userId,
     required this.title,
     this.description = '',
+    this.projectId = '',
     this.category = 'Work',
     this.color = '#2196F3',
     required this.createdAt,
@@ -24,6 +26,7 @@ class Task {
       'userId': userId,
       'title': title,
       'description': description,
+      'projectId': projectId,
       'category': category,
       'color': color,
       'createdAt': createdAt.millisecondsSinceEpoch,
@@ -37,6 +40,7 @@ class Task {
       userId: map['userId'] ?? '',
       title: map['title'] ?? '',
       description: map['description'] ?? '',
+      projectId: map['projectId'] ?? '',
       category: map['category'] ?? 'Work',
       color: map['color'] ?? '#2196F3',
       createdAt: DateTime.fromMillisecondsSinceEpoch(map['createdAt'] ?? 0),

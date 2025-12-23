@@ -8,6 +8,8 @@ class TimeEntry {
   final int duration; // in seconds
   final String category;
   final bool isRunning;
+  final int? expectedDuration;
+  final String? source;
 
   TimeEntry({
     required this.id,
@@ -19,6 +21,8 @@ class TimeEntry {
     this.duration = 0,
     this.category = 'Work',
     this.isRunning = false,
+    this.expectedDuration,
+    this.source,
   });
 
   Map<String, dynamic> toMap() {
@@ -31,6 +35,8 @@ class TimeEntry {
       'duration': duration,
       'category': category,
       'isRunning': isRunning,
+      'expectedDuration': expectedDuration,
+      'source': source,
     };
   }
 
@@ -47,6 +53,8 @@ class TimeEntry {
       duration: map['duration'] ?? 0,
       category: map['category'] ?? 'Work',
       isRunning: map['isRunning'] ?? false,
+      expectedDuration: map['expectedDuration'],
+      source: map['source'],
     );
   }
 
@@ -60,6 +68,8 @@ class TimeEntry {
     int? duration,
     String? category,
     bool? isRunning,
+    int? expectedDuration,
+    String? source,
   }) {
     return TimeEntry(
       id: id ?? this.id,
@@ -71,6 +81,8 @@ class TimeEntry {
       duration: duration ?? this.duration,
       category: category ?? this.category,
       isRunning: isRunning ?? this.isRunning,
+      expectedDuration: expectedDuration ?? this.expectedDuration,
+      source: source ?? this.source,
     );
   }
 }

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:share_plus/share_plus.dart';
 import '../services/time_tracker_service.dart';
 import '../models/time_entry.dart';
 import '../widgets/glass_container.dart';
@@ -19,6 +20,18 @@ class _StatisticsTabState extends State<StatisticsTab> {
     return '${hours}h ${minutes}m';
   }
 
+  Future<void> _handleExport() async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final path = await _service.exportToCSV();
+      await Share.shareXFiles([XFile(path)], text: 'My Time Tracker Export');
+    } catch (e) {
+      if (mounted) {
+        messenger.showSnackBar(SnackBar(content: Text('Export failed: $e')));
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -28,8 +41,29 @@ class _StatisticsTabState extends State<StatisticsTab> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Today\'s Activity',
+                  style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
+                IconButton(
+                  onPressed: _handleExport,
+                  icon: const Icon(Icons.download, color: Colors.blueAccent),
+                  tooltip: 'Export CSV',
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            _buildTodayStats(),
+            const SizedBox(height: 32),
             const Text(
-              'Today\'s Activity',
+              'Daily Goal Progress',
               style: TextStyle(
                 fontSize: 24,
                 fontWeight: FontWeight.bold,
@@ -37,7 +71,7 @@ class _StatisticsTabState extends State<StatisticsTab> {
               ),
             ),
             const SizedBox(height: 16),
-            _buildTodayStats(),
+            _buildGoalProgress(),
             const SizedBox(height: 32),
             const Text(
               'This Week',
@@ -66,6 +100,64 @@ class _StatisticsTabState extends State<StatisticsTab> {
     );
   }
 
+  Widget _buildGoalProgress() {
+    return StreamBuilder<int>(
+      stream: _service.getDailyGoal(),
+      builder: (context, goalSnapshot) {
+        return StreamBuilder<List<TimeEntry>>(
+          stream: _service.getTodayEntries(),
+          builder: (context, entriesSnapshot) {
+            final goalSeconds = goalSnapshot.data ?? (8 * 3600);
+            final entries = entriesSnapshot.data ?? [];
+            final totalSeconds = entries.fold<int>(
+              0,
+              (sum, e) => sum + e.duration,
+            );
+
+            final progress = (totalSeconds / goalSeconds).clamp(0.0, 1.0);
+            final percent = (progress * 100).toInt();
+
+            return GlassContainer(
+              padding: const EdgeInsets.all(20.0),
+              child: Column(
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Progress: $percent%',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      Text(
+                        '${_formatDuration(totalSeconds)} / ${_formatDuration(goalSeconds)}',
+                        style: const TextStyle(color: Colors.white70),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(6),
+                    child: LinearProgressIndicator(
+                      value: progress,
+                      backgroundColor: Colors.white12,
+                      valueColor: const AlwaysStoppedAnimation(
+                        Colors.blueAccent,
+                      ),
+                      minHeight: 12,
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   Widget _buildTodayStats() {
     return StreamBuilder<List<TimeEntry>>(
       stream: _service.getTodayEntries(),
@@ -79,8 +171,10 @@ class _StatisticsTabState extends State<StatisticsTab> {
 
         return GlassContainer(
           padding: const EdgeInsets.all(20.0),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
+          child: Wrap(
+            alignment: WrapAlignment.spaceAround,
+            spacing: 16.0,
+            runSpacing: 16.0,
             children: [
               _buildStatItem(
                 Icons.timer,
@@ -132,14 +226,31 @@ class _StatisticsTabState extends State<StatisticsTab> {
     return FutureBuilder<List<Map<String, dynamic>>>(
       future: _service.getWeeklySummary(),
       builder: (context, snapshot) {
-        if (!snapshot.hasData) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
+        }
+        if (snapshot.hasError) {
+          return const Center(
+            child: Text(
+              'Failed to load weekly data',
+              style: TextStyle(color: Colors.white70),
+            ),
+          );
+        }
+        if (!snapshot.hasData || snapshot.data!.isEmpty) {
+          return const Center(
+            child: Text(
+              'No weekly data available',
+              style: TextStyle(color: Colors.white70),
+            ),
+          );
         }
 
         final weekData = snapshot.data!;
         final maxDuration = weekData.fold<int>(
           0,
-          (max, day) => day['duration'] > max ? day['duration'] : max,
+          (max, day) =>
+              (day['duration'] as int) > max ? (day['duration'] as int) : max,
         );
 
         return GlassContainer(
@@ -173,11 +284,13 @@ class _StatisticsTabState extends State<StatisticsTab> {
                           width: 30,
                           height: height,
                           decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.8),
+                            color: Colors.white.withAlpha((0.8 * 255).toInt()),
                             borderRadius: BorderRadius.circular(4),
                             boxShadow: [
                               BoxShadow(
-                                color: Colors.white.withOpacity(0.2),
+                                color: Colors.white.withAlpha(
+                                  (0.2 * 255).toInt(),
+                                ),
                                 blurRadius: 4,
                                 offset: const Offset(0, 2),
                               ),
@@ -259,14 +372,16 @@ class _StatisticsTabState extends State<StatisticsTab> {
                       ],
                     ),
                     const SizedBox(height: 4),
-                    LinearProgressIndicator(
-                      value: entry.value / total,
-                      backgroundColor: Colors.white12,
-                      valueColor: AlwaysStoppedAnimation(
-                        _getCategoryColor(entry.key),
-                      ),
-                      minHeight: 8,
+                    ClipRRect(
                       borderRadius: BorderRadius.circular(4),
+                      child: LinearProgressIndicator(
+                        value: entry.value / total,
+                        backgroundColor: Colors.white12,
+                        valueColor: AlwaysStoppedAnimation(
+                          _getCategoryColor(entry.key),
+                        ),
+                        minHeight: 8,
+                      ),
                     ),
                     const SizedBox(height: 4),
                     Text(

@@ -34,6 +34,9 @@ class _LoginPageState extends State<LoginPage> {
 
     setState(() => isLoading = true);
 
+    final nav = Navigator.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+
     String? error;
     if (isSignUp) {
       error = await _authService.signUp(
@@ -53,13 +56,9 @@ class _LoginPageState extends State<LoginPage> {
 
     if (error == null) {
       // Navigate to Home page
-      Navigator.of(
-        context,
-      ).pushReplacement(MaterialPageRoute(builder: (_) => HomeScreen()));
+      nav.pushReplacement(MaterialPageRoute(builder: (_) => HomeScreen()));
     } else {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(error)));
+      messenger.showSnackBar(SnackBar(content: Text(error)));
     }
   }
 
@@ -74,25 +73,25 @@ class _LoginPageState extends State<LoginPage> {
       ),
       body: Center(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(16.0),
+          padding: const EdgeInsets.fromLTRB(12, 12, 12, 100),
           child: GlassContainer(
-            padding: const EdgeInsets.all(24.0),
+            padding: const EdgeInsets.all(16.0),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               mainAxisSize: MainAxisSize.min,
               children: [
                 // Logo/Title
                 const Icon(Icons.timer, size: 64, color: Colors.white),
-                const SizedBox(height: 24),
+                const SizedBox(height: 16),
                 const Text(
                   'Smart Time Tracker',
                   style: TextStyle(
-                    fontSize: 28,
+                    fontSize: 22,
                     fontWeight: FontWeight.bold,
                     color: Colors.white,
                   ),
                 ),
-                const SizedBox(height: 32),
+                const SizedBox(height: 20),
 
                 // Email Field
                 TextField(
@@ -100,14 +99,16 @@ class _LoginPageState extends State<LoginPage> {
                   style: const TextStyle(color: Colors.white),
                   decoration: InputDecoration(
                     hintText: 'Email',
-                    hintStyle: TextStyle(color: Colors.white.withOpacity(0.7)),
+                    hintStyle: TextStyle(
+                      color: Colors.white.withAlpha((0.7 * 255).toInt()),
+                    ),
                     prefixIcon: const Icon(Icons.email, color: Colors.white70),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
                       borderSide: BorderSide.none,
                     ),
                     filled: true,
-                    fillColor: Colors.white.withOpacity(0.1),
+                    fillColor: Colors.white.withAlpha((0.1 * 255).toInt()),
                   ),
                   keyboardType: TextInputType.emailAddress,
                 ),
@@ -120,14 +121,16 @@ class _LoginPageState extends State<LoginPage> {
                   style: const TextStyle(color: Colors.white),
                   decoration: InputDecoration(
                     hintText: 'Password',
-                    hintStyle: TextStyle(color: Colors.white.withOpacity(0.7)),
+                    hintStyle: TextStyle(
+                      color: Colors.white.withAlpha((0.7 * 255).toInt()),
+                    ),
                     prefixIcon: const Icon(Icons.lock, color: Colors.white70),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
                       borderSide: BorderSide.none,
                     ),
                     filled: true,
-                    fillColor: Colors.white.withOpacity(0.1),
+                    fillColor: Colors.white.withAlpha((0.1 * 255).toInt()),
                   ),
                 ),
                 const SizedBox(height: 24),

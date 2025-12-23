@@ -1,3 +1,5 @@
 {
-    "npm.packageManager": "bun"
+    "npm.packageManager": "bun",
+    "editor.experimentalGpuAcceleration": "off",
+    "chat.agent.maxRequests": 50
 }
