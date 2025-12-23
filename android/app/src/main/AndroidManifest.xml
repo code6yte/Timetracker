@@ -1,5 +1,4 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- Permissions for Firebase and internet connectivity -->
     <uses-permission android:name="android.permission.INTERNET"/>
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
     
@@ -7,6 +6,10 @@
         android:label="flutter_application_1"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
+        <!-- Disabling Impeller to fix graphics allocation errors on some emulators/devices -->
+        <meta-data
+            android:name="io.flutter.embedding.android.EnableImpeller"
+            android:value="false" />
         <activity
             android:name=".MainActivity"
             android:exported="true"

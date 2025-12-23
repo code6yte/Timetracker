@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import '../services/time_tracker_service.dart';
 import '../models/time_entry.dart';
+import '../widgets/glass_container.dart';
 
 class StatisticsTab extends StatefulWidget {
+  const StatisticsTab({super.key});
+
   @override
   State<StatisticsTab> createState() => _StatisticsTabState();
 }
@@ -19,28 +22,41 @@ class _StatisticsTabState extends State<StatisticsTab> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.transparent,
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
               'Today\'s Activity',
-              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+              style: TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+              ),
             ),
             const SizedBox(height: 16),
             _buildTodayStats(),
             const SizedBox(height: 32),
             const Text(
               'This Week',
-              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+              style: TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+              ),
             ),
             const SizedBox(height: 16),
             _buildWeeklyChart(),
             const SizedBox(height: 32),
             const Text(
               'Category Breakdown',
-              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+              style: TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+              ),
             ),
             const SizedBox(height: 16),
             _buildCategoryBreakdown(),
@@ -55,49 +71,58 @@ class _StatisticsTabState extends State<StatisticsTab> {
       stream: _service.getTodayEntries(),
       builder: (context, snapshot) {
         final entries = snapshot.data ?? [];
-        final totalSeconds = entries.fold<int>(0, (sum, entry) => sum + entry.duration);
+        final totalSeconds = entries.fold<int>(
+          0,
+          (sum, entry) => sum + entry.duration,
+        );
         final sessionCount = entries.length;
 
-        return Card(
-          elevation: 4,
-          child: Padding(
-            padding: const EdgeInsets.all(20.0),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                _buildStatItem(
-                  Icons.timer,
-                  'Total Time',
-                  _formatDuration(totalSeconds),
-                  Colors.blue,
-                ),
-                _buildStatItem(
-                  Icons.playlist_add_check,
-                  'Sessions',
-                  sessionCount.toString(),
-                  Colors.green,
-                ),
-              ],
-            ),
+        return GlassContainer(
+          padding: const EdgeInsets.all(20.0),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              _buildStatItem(
+                Icons.timer,
+                'Total Time',
+                _formatDuration(totalSeconds),
+                Colors.blueAccent,
+              ),
+              _buildStatItem(
+                Icons.playlist_add_check,
+                'Sessions',
+                sessionCount.toString(),
+                Colors.greenAccent,
+              ),
+            ],
           ),
         );
       },
     );
   }
 
-  Widget _buildStatItem(IconData icon, String label, String value, Color color) {
+  Widget _buildStatItem(
+    IconData icon,
+    String label,
+    String value,
+    Color color,
+  ) {
     return Column(
       children: [
         Icon(icon, size: 48, color: color),
         const SizedBox(height: 8),
         Text(
           label,
-          style: const TextStyle(fontSize: 14, color: Colors.grey),
+          style: const TextStyle(fontSize: 14, color: Colors.white70),
         ),
         const SizedBox(height: 4),
         Text(
           value,
-          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+          style: const TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+          ),
         ),
       ],
     );
@@ -117,51 +142,62 @@ class _StatisticsTabState extends State<StatisticsTab> {
           (max, day) => day['duration'] > max ? day['duration'] : max,
         );
 
-        return Card(
-          elevation: 4,
-          child: Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              children: [
-                SizedBox(
-                  height: 200,
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    mainAxisAlignment: MainAxisAlignment.spaceAround,
-                    children: weekData.map((day) {
-                      final height = maxDuration > 0
-                          ? ((day['duration'] as int) / maxDuration * 150)
-                          : 0.0;
-                      final dayName = _getDayName(day['date']);
+        return GlassContainer(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            children: [
+              SizedBox(
+                height: 200,
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  children: weekData.map((day) {
+                    final height = maxDuration > 0
+                        ? ((day['duration'] as int) / maxDuration * 150)
+                        : 0.0;
+                    final dayName = _getDayName(day['date']);
 
-                      return Column(
-                        mainAxisAlignment: MainAxisAlignment.end,
-                        children: [
-                          Text(
-                            day['hours'],
-                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                    return Column(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        Text(
+                          day['hours'],
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
                           ),
-                          const SizedBox(height: 4),
-                          Container(
-                            width: 30,
-                            height: height,
-                            decoration: BoxDecoration(
-                              color: Colors.blue,
-                              borderRadius: BorderRadius.circular(4),
-                            ),
+                        ),
+                        const SizedBox(height: 4),
+                        Container(
+                          width: 30,
+                          height: height,
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.8),
+                            borderRadius: BorderRadius.circular(4),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.white.withOpacity(0.2),
+                                blurRadius: 4,
+                                offset: const Offset(0, 2),
+                              ),
+                            ],
                           ),
-                          const SizedBox(height: 8),
-                          Text(
-                            dayName,
-                            style: const TextStyle(fontSize: 12),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          dayName,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: Colors.white70,
                           ),
-                        ],
-                      );
-                    }).toList(),
-                  ),
+                        ),
+                      ],
+                    );
+                  }).toList(),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         );
       },
@@ -183,14 +219,12 @@ class _StatisticsTabState extends State<StatisticsTab> {
 
         final categoryData = snapshot.data!;
         if (categoryData.isEmpty) {
-          return const Card(
-            child: Padding(
-              padding: EdgeInsets.all(20.0),
-              child: Center(
-                child: Text(
-                  'No data for today',
-                  style: TextStyle(color: Colors.grey),
-                ),
+          return const GlassContainer(
+            padding: EdgeInsets.all(20.0),
+            child: Center(
+              child: Text(
+                'No data for today',
+                style: TextStyle(color: Colors.white70),
               ),
             ),
           );
@@ -198,48 +232,54 @@ class _StatisticsTabState extends State<StatisticsTab> {
 
         final total = categoryData.values.fold<int>(0, (sum, val) => sum + val);
 
-        return Card(
-          elevation: 4,
-          child: Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              children: categoryData.entries.map((entry) {
-                final percentage = (entry.value / total * 100).round();
-                return Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 8.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            entry.key,
-                            style: const TextStyle(fontWeight: FontWeight.bold),
+        return GlassContainer(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            children: categoryData.entries.map((entry) {
+              final percentage = (entry.value / total * 100).round();
+              return Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          entry.key,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
                           ),
-                          Text(
-                            _formatDuration(entry.value),
-                            style: const TextStyle(color: Colors.grey),
-                          ),
-                        ],
+                        ),
+                        Text(
+                          _formatDuration(entry.value),
+                          style: const TextStyle(color: Colors.white70),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    LinearProgressIndicator(
+                      value: entry.value / total,
+                      backgroundColor: Colors.white12,
+                      valueColor: AlwaysStoppedAnimation(
+                        _getCategoryColor(entry.key),
                       ),
-                      const SizedBox(height: 4),
-                      LinearProgressIndicator(
-                        value: entry.value / total,
-                        backgroundColor: Colors.grey[200],
-                        valueColor: AlwaysStoppedAnimation(_getCategoryColor(entry.key)),
-                        minHeight: 8,
+                      minHeight: 8,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '$percentage%',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: Colors.white60,
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        '$percentage%',
-                        style: const TextStyle(fontSize: 12, color: Colors.grey),
-                      ),
-                    ],
-                  ),
-                );
-              }).toList(),
-            ),
+                    ),
+                  ],
+                ),
+              );
+            }).toList(),
           ),
         );
       },
@@ -249,15 +289,15 @@ class _StatisticsTabState extends State<StatisticsTab> {
   Color _getCategoryColor(String category) {
     switch (category.toLowerCase()) {
       case 'work':
-        return Colors.blue;
+        return Colors.blueAccent;
       case 'study':
-        return Colors.green;
+        return Colors.greenAccent;
       case 'personal':
-        return Colors.orange;
+        return Colors.orangeAccent;
       case 'exercise':
-        return Colors.purple;
+        return Colors.purpleAccent;
       default:
-        return Colors.red;
+        return Colors.redAccent;
     }
   }
 }

@@ -13,23 +13,26 @@ class FirebaseService {
         'timestamp': DateTime.now().millisecondsSinceEpoch,
       });
     } catch (e) {
-      print('Error adding note: $e');
       rethrow;
     }
   }
 
   // Read - Fetch all notes as stream
   Stream<List<Map<String, dynamic>>> getNotes() {
-    return _firestore.collection(_collectionName).orderBy('timestamp', descending: true).snapshots().map((snapshot) {
-      return snapshot.docs.map((doc) {
-        return {
-          'id': doc.id,
-          'title': doc['title'] ?? '',
-          'description': doc['description'] ?? '',
-          'timestamp': doc['timestamp'] ?? 0,
-        };
-      }).toList();
-    });
+    return _firestore
+        .collection(_collectionName)
+        .orderBy('timestamp', descending: true)
+        .snapshots()
+        .map((snapshot) {
+          return snapshot.docs.map((doc) {
+            return {
+              'id': doc.id,
+              'title': doc['title'] ?? '',
+              'description': doc['description'] ?? '',
+              'timestamp': doc['timestamp'] ?? 0,
+            };
+          }).toList();
+        });
   }
 
   // Update - Modify an existing note
@@ -41,7 +44,6 @@ class FirebaseService {
         'timestamp': DateTime.now().millisecondsSinceEpoch,
       });
     } catch (e) {
-      print('Error updating note: $e');
       rethrow;
     }
   }
@@ -51,7 +53,6 @@ class FirebaseService {
     try {
       await _firestore.collection(_collectionName).doc(id).delete();
     } catch (e) {
-      print('Error deleting note: $e');
       rethrow;
     }
   }
@@ -70,7 +71,6 @@ class FirebaseService {
       }
       return null;
     } catch (e) {
-      print('Error getting note: $e');
       rethrow;
     }
   }
