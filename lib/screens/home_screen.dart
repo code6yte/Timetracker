@@ -86,13 +86,18 @@ class _HomeScreenState extends State<HomeScreen> {
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
-          backgroundColor: const Color(0xFF1E1E1E),
+          backgroundColor:
+              Theme.of(context).dialogTheme.backgroundColor ??
+              Theme.of(context).colorScheme.surface,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(24),
           ),
-          title: const Text(
+          title: Text(
             'New Project',
-            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.onSurface,
+              fontWeight: FontWeight.bold,
+            ),
           ),
           content: SingleChildScrollView(
             child: Column(
@@ -100,12 +105,20 @@ class _HomeScreenState extends State<HomeScreen> {
               children: [
                 TextField(
                   controller: nameController,
-                  style: const TextStyle(color: Colors.white),
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.onSurface,
+                  ),
                   decoration: InputDecoration(
                     labelText: 'Project Name',
-                    labelStyle: const TextStyle(color: Colors.white60),
+                    labelStyle: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
                     enabledBorder: OutlineInputBorder(
-                      borderSide: const BorderSide(color: Colors.white24),
+                      borderSide: BorderSide(
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.onSurface.withAlpha((0.18 * 255).toInt()),
+                      ),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     focusedBorder: OutlineInputBorder(
@@ -125,13 +138,15 @@ class _HomeScreenState extends State<HomeScreen> {
               onPressed: () => Navigator.pop(context),
               child: Text(
                 'Cancel',
-                style: const TextStyle(color: Colors.white54),
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
               ),
             ),
             ElevatedButton(
               style: ElevatedButton.styleFrom(
                 backgroundColor: _safeParseColor(selectedColor),
-                foregroundColor: Colors.white,
+                foregroundColor: Theme.of(context).colorScheme.onSurface,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
@@ -768,17 +783,30 @@ class _HomeScreenState extends State<HomeScreen> {
                           return false;
                         }
                         if (direction == DismissDirection.endToStart) {
+                          final messenger = ScaffoldMessenger.of(context);
                           final confirmed = await showDialog<bool>(
                             context: context,
                             builder: (context) => AlertDialog(
-                              backgroundColor: const Color(0xFF1E1E1E),
-                              title: const Text(
+                              backgroundColor:
+                                  Theme.of(
+                                    context,
+                                  ).dialogTheme.backgroundColor ??
+                                  Theme.of(context).colorScheme.surface,
+                              title: Text(
                                 'Delete Project',
-                                style: TextStyle(color: Colors.white),
+                                style: TextStyle(
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.onSurface,
+                                ),
                               ),
                               content: Text(
                                 'Delete "${p.name}"? This will not delete tasks automatically.',
-                                style: const TextStyle(color: Colors.white70),
+                                style: TextStyle(
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.onSurfaceVariant,
+                                ),
                               ),
                               actions: [
                                 TextButton(
@@ -797,7 +825,6 @@ class _HomeScreenState extends State<HomeScreen> {
                             ),
                           );
                           if (confirmed == true) {
-                            final messenger = ScaffoldMessenger.of(context);
                             try {
                               await _service.deleteProject(p.id);
                               if (!mounted) return false;
@@ -1047,10 +1074,18 @@ class _HomeScreenState extends State<HomeScreen> {
                                   final confirmed = await showDialog<bool>(
                                     context: context,
                                     builder: (context) => AlertDialog(
-                                      backgroundColor: const Color(0xFF1E1E1E),
-                                      title: const Text(
+                                      backgroundColor:
+                                          Theme.of(
+                                            context,
+                                          ).dialogTheme.backgroundColor ??
+                                          Theme.of(context).colorScheme.surface,
+                                      title: Text(
                                         'Delete Task',
-                                        style: TextStyle(color: Colors.white),
+                                        style: TextStyle(
+                                          color: Theme.of(
+                                            context,
+                                          ).colorScheme.onSurface,
+                                        ),
                                       ),
                                       content: Text(
                                         'Delete "${t.title}"?',

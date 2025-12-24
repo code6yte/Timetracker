@@ -44,12 +44,12 @@ class _StatisticsTabState extends State<StatisticsTab> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text(
+                Text(
                   'Today\'s Activity',
                   style: TextStyle(
                     fontSize: 24,
                     fontWeight: FontWeight.bold,
-                    color: Colors.white,
+                    color: Theme.of(context).colorScheme.onSurface,
                   ),
                 ),
                 IconButton(
@@ -62,34 +62,34 @@ class _StatisticsTabState extends State<StatisticsTab> {
             const SizedBox(height: 16),
             _buildTodayStats(),
             const SizedBox(height: 32),
-            const Text(
+            Text(
               'Daily Goal Progress',
               style: TextStyle(
                 fontSize: 24,
                 fontWeight: FontWeight.bold,
-                color: Colors.white,
+                color: Theme.of(context).colorScheme.onSurface,
               ),
             ),
             const SizedBox(height: 16),
             _buildGoalProgress(),
             const SizedBox(height: 32),
-            const Text(
+            Text(
               'This Week',
               style: TextStyle(
                 fontSize: 24,
                 fontWeight: FontWeight.bold,
-                color: Colors.white,
+                color: Theme.of(context).colorScheme.onSurface,
               ),
             ),
             const SizedBox(height: 16),
             _buildWeeklyChart(),
             const SizedBox(height: 32),
-            const Text(
+            Text(
               'Category Breakdown',
               style: TextStyle(
                 fontSize: 24,
                 fontWeight: FontWeight.bold,
-                color: Colors.white,
+                color: Theme.of(context).colorScheme.onSurface,
               ),
             ),
             const SizedBox(height: 16),
@@ -126,14 +126,16 @@ class _StatisticsTabState extends State<StatisticsTab> {
                     children: [
                       Text(
                         'Progress: $percent%',
-                        style: const TextStyle(
-                          color: Colors.white,
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.onSurface,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
                       Text(
                         '${_formatDuration(totalSeconds)} / ${_formatDuration(goalSeconds)}',
-                        style: const TextStyle(color: Colors.white70),
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
                       ),
                     ],
                   ),
@@ -207,7 +209,10 @@ class _StatisticsTabState extends State<StatisticsTab> {
         const SizedBox(height: 8),
         Text(
           label,
-          style: const TextStyle(fontSize: 14, color: Colors.white70),
+          style: TextStyle(
+            fontSize: 14,
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
         ),
         const SizedBox(height: 4),
         Text(
@@ -273,10 +278,10 @@ class _StatisticsTabState extends State<StatisticsTab> {
                       children: [
                         Text(
                           day['hours'],
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.bold,
-                            color: Colors.white,
+                            color: Theme.of(context).colorScheme.onSurface,
                           ),
                         ),
                         const SizedBox(height: 4),
@@ -284,7 +289,8 @@ class _StatisticsTabState extends State<StatisticsTab> {
                           width: 30,
                           height: height,
                           decoration: BoxDecoration(
-                            color: Colors.white.withAlpha((0.8 * 255).toInt()),
+                            color: Theme.of(context).colorScheme.onSurface
+                                .withAlpha((0.8 * 255).toInt()),
                             borderRadius: BorderRadius.circular(4),
                             boxShadow: [
                               BoxShadow(
@@ -300,9 +306,11 @@ class _StatisticsTabState extends State<StatisticsTab> {
                         const SizedBox(height: 8),
                         Text(
                           dayName,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 12,
-                            color: Colors.white70,
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onSurfaceVariant,
                           ),
                         ),
                       ],
@@ -360,14 +368,18 @@ class _StatisticsTabState extends State<StatisticsTab> {
                       children: [
                         Text(
                           entry.key,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontWeight: FontWeight.bold,
-                            color: Colors.white,
+                            color: Theme.of(context).colorScheme.onSurface,
                           ),
                         ),
                         Text(
                           _formatDuration(entry.value),
-                          style: const TextStyle(color: Colors.white70),
+                          style: TextStyle(
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onSurfaceVariant,
+                          ),
                         ),
                       ],
                     ),
@@ -386,9 +398,9 @@ class _StatisticsTabState extends State<StatisticsTab> {
                     const SizedBox(height: 4),
                     Text(
                       '$percentage%',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 12,
-                        color: Colors.white60,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
                       ),
                     ),
                   ],

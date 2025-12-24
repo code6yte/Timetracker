@@ -81,14 +81,18 @@ class _LoginPageState extends State<LoginPage> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 // Logo/Title
-                const Icon(Icons.timer, size: 64, color: Colors.white),
+                Icon(
+                  Icons.timer,
+                  size: 64,
+                  color: Theme.of(context).colorScheme.onSurface,
+                ),
                 const SizedBox(height: 16),
-                const Text(
+                Text(
                   'Smart Time Tracker',
                   style: TextStyle(
                     fontSize: 22,
                     fontWeight: FontWeight.bold,
-                    color: Colors.white,
+                    color: Theme.of(context).colorScheme.onSurface,
                   ),
                 ),
                 const SizedBox(height: 20),
@@ -96,19 +100,28 @@ class _LoginPageState extends State<LoginPage> {
                 // Email Field
                 TextField(
                   controller: emailController,
-                  style: const TextStyle(color: Colors.white),
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.onSurface,
+                  ),
                   decoration: InputDecoration(
                     hintText: 'Email',
                     hintStyle: TextStyle(
-                      color: Colors.white.withAlpha((0.7 * 255).toInt()),
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.onSurface.withAlpha((0.7 * 255).toInt()),
                     ),
-                    prefixIcon: const Icon(Icons.email, color: Colors.white70),
+                    prefixIcon: Icon(
+                      Icons.email,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
                       borderSide: BorderSide.none,
                     ),
                     filled: true,
-                    fillColor: Colors.white.withAlpha((0.1 * 255).toInt()),
+                    fillColor: Theme.of(
+                      context,
+                    ).colorScheme.surface.withAlpha((0.1 * 255).toInt()),
                   ),
                   keyboardType: TextInputType.emailAddress,
                 ),
@@ -118,19 +131,28 @@ class _LoginPageState extends State<LoginPage> {
                 TextField(
                   controller: passwordController,
                   obscureText: true,
-                  style: const TextStyle(color: Colors.white),
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.onSurface,
+                  ),
                   decoration: InputDecoration(
                     hintText: 'Password',
                     hintStyle: TextStyle(
-                      color: Colors.white.withAlpha((0.7 * 255).toInt()),
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.onSurface.withAlpha((0.7 * 255).toInt()),
                     ),
-                    prefixIcon: const Icon(Icons.lock, color: Colors.white70),
+                    prefixIcon: Icon(
+                      Icons.lock,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
                       borderSide: BorderSide.none,
                     ),
                     filled: true,
-                    fillColor: Colors.white.withAlpha((0.1 * 255).toInt()),
+                    fillColor: Theme.of(
+                      context,
+                    ).colorScheme.surface.withAlpha((0.1 * 255).toInt()),
                   ),
                 ),
                 const SizedBox(height: 24),

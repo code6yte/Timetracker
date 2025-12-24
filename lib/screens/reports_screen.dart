@@ -25,10 +25,12 @@ class _ReportsScreenState extends State<ReportsScreen> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1E1E1E),
+        backgroundColor:
+            Theme.of(context).dialogTheme.backgroundColor ??
+            Theme.of(context).colorScheme.surface,
         title: Text(
           entry.taskTitle,
-          style: const TextStyle(color: Colors.white),
+          style: TextStyle(color: Theme.of(context).colorScheme.onSurface),
         ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
@@ -36,22 +38,33 @@ class _ReportsScreenState extends State<ReportsScreen> {
           children: [
             Text(
               'Category: ${entry.category}',
-              style: const TextStyle(color: Colors.white70),
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
             ),
             Text(
               'Start: ${DateFormat('HH:mm').format(entry.startTime)}',
-              style: const TextStyle(color: Colors.white70),
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
             ),
             Text(
               'Duration: ${(entry.duration / 60).toStringAsFixed(1)} minutes',
-              style: const TextStyle(color: Colors.white70),
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
             ),
           ],
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Close', style: TextStyle(color: Colors.white54)),
+            child: Text(
+              'Close',
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
           ),
         ],
       ),
@@ -69,12 +82,18 @@ class _ReportsScreenState extends State<ReportsScreen> {
     return Scaffold(
       backgroundColor: Colors.transparent,
       appBar: AppBar(
-        title: const Text('Advanced Reports'),
+        title: Text(
+          'Advanced Reports',
+          style: TextStyle(color: Theme.of(context).colorScheme.onSurface),
+        ),
         backgroundColor: Colors.transparent,
         elevation: 0,
         actions: [
           IconButton(
-            icon: const Icon(Icons.share, color: Colors.white),
+            icon: Icon(
+              Icons.share,
+              color: Theme.of(context).colorScheme.onSurface,
+            ),
             onPressed: _exportReports,
             tooltip: 'Export Reports',
           ),
@@ -112,10 +131,10 @@ class _ReportsScreenState extends State<ReportsScreen> {
   Widget _buildSectionTitle(String title) {
     return Text(
       title,
-      style: const TextStyle(
+      style: TextStyle(
         fontSize: 20,
         fontWeight: FontWeight.bold,
-        color: Colors.white,
+        color: Theme.of(context).colorScheme.onSurface,
       ),
     );
   }
@@ -129,11 +148,18 @@ class _ReportsScreenState extends State<ReportsScreen> {
             children: [
               Expanded(
                 child: TextField(
-                  style: const TextStyle(color: Colors.white),
-                  decoration: const InputDecoration(
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.onSurface,
+                  ),
+                  decoration: InputDecoration(
                     hintText: 'Search tasks...',
-                    hintStyle: TextStyle(color: Colors.white54),
-                    prefixIcon: Icon(Icons.search, color: Colors.white54),
+                    hintStyle: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                    prefixIcon: Icon(
+                      Icons.search,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
                   ),
                   onChanged: (val) => setState(() => _searchQuery = val),
                 ),
@@ -160,9 +186,11 @@ class _ReportsScreenState extends State<ReportsScreen> {
           const SizedBox(height: 8),
           Row(
             children: [
-              const Text(
+              Text(
                 'Filter Category: ',
-                style: TextStyle(color: Colors.white70),
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
               ),
               const SizedBox(width: 8),
               Expanded(
@@ -179,8 +207,10 @@ class _ReportsScreenState extends State<ReportsScreen> {
                     ];
                     return DropdownButton<String>(
                       value: _selectedCategory,
-                      dropdownColor: Colors.grey[900],
-                      style: const TextStyle(color: Colors.white),
+                      dropdownColor: Theme.of(context).colorScheme.surface,
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurface,
+                      ),
                       isExpanded: true,
                       items: cats
                           .map(
@@ -220,10 +250,14 @@ class _ReportsScreenState extends State<ReportsScreen> {
               );
             }
             if (!snapshot.hasData || snapshot.data!.isEmpty) {
-              return const Center(
+              return Center(
                 child: Text(
                   'No activity for this date',
-                  style: TextStyle(color: Colors.white54),
+                  style: TextStyle(
+                    color: Theme.of(context).brightness == Brightness.light
+                        ? Colors.black
+                        : Colors.white54,
+                  ),
                 ),
               );
             }
@@ -242,8 +276,12 @@ class _ReportsScreenState extends State<ReportsScreen> {
                       (i) => i % 6 == 0
                           ? Text(
                               '$i',
-                              style: const TextStyle(
-                                color: Colors.white24,
+                              style: TextStyle(
+                                color:
+                                    Theme.of(context).brightness ==
+                                        Brightness.light
+                                    ? Colors.black
+                                    : Colors.white24,
                                 fontSize: 10,
                               ),
                             )
@@ -336,8 +374,10 @@ class _ReportsScreenState extends State<ReportsScreen> {
                   if (i % 4 == 0)
                     Text(
                       '$i',
-                      style: const TextStyle(
-                        color: Colors.white54,
+                      style: TextStyle(
+                        color: Theme.of(context).brightness == Brightness.light
+                            ? Colors.black
+                            : Colors.white54,
                         fontSize: 8,
                       ),
                     ),

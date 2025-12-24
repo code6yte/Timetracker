@@ -171,7 +171,7 @@ class _TimerTabState extends State<TimerTab>
           indicatorColor: Colors.amberAccent,
           indicatorWeight: 4,
           labelColor: Colors.amberAccent,
-          unselectedLabelColor: Colors.white70,
+          unselectedLabelColor: Theme.of(context).colorScheme.onSurfaceVariant,
           labelStyle: const TextStyle(
             fontWeight: FontWeight.bold,
             fontSize: 16,
@@ -256,10 +256,12 @@ class _TimerTabState extends State<TimerTab>
                     ),
                     Text(
                       _formatTime(seconds),
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 64, // Slightly smaller text
                         fontWeight: FontWeight.w200,
-                        color: Colors.white,
+                        color: Theme.of(context).brightness == Brightness.light
+                            ? Colors.black
+                            : Colors.white,
                         letterSpacing: -2,
                       ),
                     ),
@@ -269,10 +271,12 @@ class _TimerTabState extends State<TimerTab>
             ] else ...[
               Text(
                 _formatTime(seconds),
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 84, // Slightly smaller text
                   fontWeight: FontWeight.w200,
-                  color: Colors.white,
+                  color: Theme.of(context).brightness == Brightness.light
+                      ? Colors.black
+                      : Colors.white,
                   letterSpacing: -4,
                 ),
               ),
@@ -307,7 +311,9 @@ class _TimerTabState extends State<TimerTab>
         child: Icon(
           isRunning ? Icons.stop_rounded : Icons.play_arrow_rounded,
           size: 40,
-          color: isRunning ? Colors.white : Colors.black,
+          color: isRunning
+              ? Theme.of(context).colorScheme.onPrimary
+              : Theme.of(context).colorScheme.onSurface,
         ),
       ),
     );
@@ -339,17 +345,22 @@ class _TimerTabState extends State<TimerTab>
           child: DropdownButtonHideUnderline(
             child: DropdownButton<Task>(
               value: selectedValue,
-              hint: const Text(
+              hint: Text(
                 'Select a Task',
-                style: TextStyle(color: Colors.white60),
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
               ),
-              dropdownColor: const Color(0xFF121212),
-              icon: const Icon(
+              dropdownColor: Theme.of(context).colorScheme.surface,
+              icon: Icon(
                 Icons.keyboard_arrow_down,
-                color: Colors.white70,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
               ),
               isExpanded: true,
-              style: const TextStyle(color: Colors.white, fontSize: 16),
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurface,
+                fontSize: 16,
+              ),
               items: uniqueTasks
                   .map(
                     (t) => DropdownMenuItem(

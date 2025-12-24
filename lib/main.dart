@@ -38,7 +38,7 @@ class MyApp extends StatelessWidget {
             primarySwatch: Colors.blue,
             useMaterial3: true,
             brightness: Brightness.light,
-            scaffoldBackgroundColor: Colors.transparent,
+            scaffoldBackgroundColor: Colors.white,
             colorScheme: ColorScheme.fromSeed(
               seedColor: Colors.blue,
               brightness: Brightness.light,
@@ -53,6 +53,15 @@ class MyApp extends StatelessWidget {
                 fontSize: 20,
                 fontWeight: FontWeight.bold,
               ),
+            ),
+            dialogTheme: DialogThemeData(
+              backgroundColor: Colors.white,
+              titleTextStyle: TextStyle(
+                color: Colors.black,
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+              contentTextStyle: TextStyle(color: Colors.black87),
             ),
           ),
           darkTheme: ThemeData(
@@ -74,6 +83,15 @@ class MyApp extends StatelessWidget {
                 fontSize: 20,
                 fontWeight: FontWeight.bold,
               ),
+            ),
+            dialogTheme: const DialogThemeData(
+              backgroundColor: Color(0xFF121212),
+              titleTextStyle: TextStyle(
+                color: Colors.white,
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+              contentTextStyle: TextStyle(color: Colors.white70),
             ),
           ),
           home: StreamBuilder<User?>(
