@@ -13,6 +13,8 @@ dependencies:
 
   cupertino_icons: ^1.0.8
 
+  flutter_svg: ^2.0.7
+
   # Firebase packages
   firebase_core: ^4.2.1
   cloud_firestore: ^6.1.0
@@ -24,12 +26,24 @@ dependencies:
   share_plus: ^12.0.1
   path_provider: ^2.1.1
   intl: ^0.20.2
+  rename_app: ^1.6.5
+  hive: ^2.2.3
+  hive_flutter: ^1.1.0
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
 
   flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.4
+
+flutter_launcher_icons:
+  android: "launcher_icon"
+  ios: true
+  image_path: "assets/quick.png"
+  min_sdk_android: 21 # android min sdk value
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/

@@ -3,6 +3,7 @@ import 'package:share_plus/share_plus.dart';
 import '../services/time_tracker_service.dart';
 import '../models/time_entry.dart';
 import '../widgets/glass_container.dart';
+import '../utils/ui_helpers.dart';
 
 class StatisticsTab extends StatefulWidget {
   const StatisticsTab({super.key});
@@ -21,13 +22,16 @@ class _StatisticsTabState extends State<StatisticsTab> {
   }
 
   Future<void> _handleExport() async {
-    final messenger = ScaffoldMessenger.of(context);
     try {
       final path = await _service.exportToCSV();
       await Share.shareXFiles([XFile(path)], text: 'My Time Tracker Export');
     } catch (e) {
       if (mounted) {
-        messenger.showSnackBar(SnackBar(content: Text('Export failed: $e')));
+        AppUI.showSnackBar(
+          context, 
+          'Export failed: $e', 
+          type: SnackBarType.error
+        );
       }
     }
   }

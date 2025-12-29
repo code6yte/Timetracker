@@ -86,18 +86,20 @@ class GlassScaffold extends StatelessWidget {
       appBar: appBar,
       body: Container(
         decoration: BoxDecoration(
-          gradient: isDark
-              ? LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: isDark
+                ? [
                     const Color(0xFF0F2027),
                     const Color(0xFF203A43),
                     const Color(0xFF2C5364),
+                  ]
+                : [
+                    const Color(0xFFE0EAFC),
+                    const Color(0xFFCFDEF3),
                   ],
-                )
-              : null,
-          color: isDark ? null : Colors.white,
+          ),
         ),
         child: SafeArea(bottom: false, child: body),
       ),

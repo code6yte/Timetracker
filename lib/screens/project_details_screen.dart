@@ -3,6 +3,7 @@ import '../models/project.dart';
 import '../models/task.dart';
 import '../services/time_tracker_service.dart';
 import '../widgets/glass_container.dart';
+import '../utils/ui_helpers.dart';
 
 class ProjectDetailsScreen extends StatefulWidget {
   final Project project;
@@ -29,88 +30,97 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen> {
     _taskController.clear();
     final accentColor = _safeParseColor(widget.project.color);
 
-    showDialog(
+    AppUI.showAppBottomSheet(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor:
-            Theme.of(context).dialogTheme.backgroundColor ??
-            Theme.of(context).colorScheme.surface,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text(
-          'New Task in ${widget.project.name}',
-          style: TextStyle(
-            color: Theme.of(context).colorScheme.onSurface,
-            fontWeight: FontWeight.bold,
-            fontSize: 18,
-          ),
-        ),
-        content: TextField(
-          controller: _taskController,
-          style: TextStyle(color: Theme.of(context).colorScheme.onSurface),
-          autofocus: true,
-          decoration: InputDecoration(
-            labelText: 'Task Name',
-            labelStyle: TextStyle(
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderSide: BorderSide(
-                color: Theme.of(context).colorScheme.onSurface.withAlpha(
-                  (0.18 * 255).toInt(),
-                ),
-              ),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderSide: BorderSide(color: accentColor),
-              borderRadius: BorderRadius.circular(12),
-            ),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text(
-              'Cancel',
-              style: TextStyle(
+      title: 'New Task in ${widget.project.name}',
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          TextField(
+            controller: _taskController,
+            style: TextStyle(color: Theme.of(context).colorScheme.onSurface),
+            autofocus: true,
+            decoration: InputDecoration(
+              labelText: 'Task Name',
+              labelStyle: TextStyle(
                 color: Theme.of(context).colorScheme.onSurfaceVariant,
               ),
-            ),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: accentColor,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
+              enabledBorder: OutlineInputBorder(
+                borderSide: BorderSide(
+                  color: Theme.of(context).colorScheme.onSurface.withAlpha(
+                    (0.18 * 255).toInt(),
+                  ),
+                ),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderSide: BorderSide(color: accentColor),
                 borderRadius: BorderRadius.circular(12),
               ),
             ),
-            onPressed: () async {
-              if (_taskController.text.isNotEmpty) {
-                final nav = Navigator.of(context);
-                final messenger = ScaffoldMessenger.of(context);
-                try {
-                  await _service.createTask(
-                    _taskController.text.trim(),
-                    '',
-                    widget.project.id,
-                    widget.project.name,
-                    widget.project.color,
-                  );
-                  if (mounted) {
-                    nav.pop();
-                  }
-                } catch (e) {
-                  if (mounted) {
-                    messenger.showSnackBar(
-                      SnackBar(content: Text('Failed to add task: $e')),
-                    );
-                  }
-                }
-              }
-            },
-            child: const Text('Add Task'),
           ),
+          const SizedBox(height: 32),
+          Row(
+            children: [
+              Expanded(
+                child: TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                  ),
+                  child: Text(
+                    'Cancel',
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      fontSize: 16,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: accentColor,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    elevation: 0,
+                  ),
+                  onPressed: () async {
+                    if (_taskController.text.isNotEmpty) {
+                      final nav = Navigator.of(context);
+                      try {
+                        await _service.createTask(
+                          _taskController.text.trim(),
+                          '',
+                          widget.project.id,
+                          widget.project.name,
+                          widget.project.color,
+                        );
+                        if (mounted) {
+                          nav.pop();
+                        }
+                      } catch (e) {
+                        if (mounted) {
+                          AppUI.showSnackBar(
+                            context, 
+                            'Failed to add task: $e', 
+                            type: SnackBarType.error
+                          );
+                        }
+                      }
+                    }
+                  },
+                  child: const Text('Add Task', style: TextStyle(fontWeight: FontWeight.bold)),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
         ],
       ),
     );
@@ -120,145 +130,132 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen> {
     _taskController.text = task.title;
     final accentColor = _safeParseColor(widget.project.color);
 
-    showDialog(
+    AppUI.showAppBottomSheet(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor:
-            Theme.of(context).dialogTheme.backgroundColor ??
-            Theme.of(context).colorScheme.surface,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text(
-          'Edit Task',
-          style: TextStyle(
-            color: Theme.of(context).colorScheme.onSurface,
-            fontWeight: FontWeight.bold,
-            fontSize: 18,
-          ),
-        ),
-        content: TextField(
-          controller: _taskController,
-          style: TextStyle(color: Theme.of(context).colorScheme.onSurface),
-          autofocus: true,
-          decoration: InputDecoration(
-            labelText: 'Task Name',
-            labelStyle: TextStyle(
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderSide: BorderSide(
-                color: Theme.of(context).colorScheme.onSurface.withAlpha(
-                  (0.18 * 255).toInt(),
-                ),
-              ),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderSide: BorderSide(color: accentColor),
-              borderRadius: BorderRadius.circular(12),
-            ),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text(
-              'Cancel',
-              style: TextStyle(
+      title: 'Edit Task',
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          TextField(
+            controller: _taskController,
+            style: TextStyle(color: Theme.of(context).colorScheme.onSurface),
+            autofocus: true,
+            decoration: InputDecoration(
+              labelText: 'Task Name',
+              labelStyle: TextStyle(
                 color: Theme.of(context).colorScheme.onSurfaceVariant,
               ),
-            ),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: accentColor,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
+              enabledBorder: OutlineInputBorder(
+                borderSide: BorderSide(
+                  color: Theme.of(context).colorScheme.onSurface.withAlpha(
+                    (0.18 * 255).toInt(),
+                  ),
+                ),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderSide: BorderSide(color: accentColor),
                 borderRadius: BorderRadius.circular(12),
               ),
             ),
-            onPressed: () async {
-              if (_taskController.text.isNotEmpty) {
-                final nav = Navigator.of(context);
-                final messenger = ScaffoldMessenger.of(context);
-                try {
-                  final newTitle = _taskController.text.trim();
-                  await _service.updateTask(
-                    task.id,
-                    newTitle,
-                    task.description,
-                    widget.project.id,
-                    widget.project.name,
-                  );
-                  if (!mounted) return;
-                  messenger.showSnackBar(
-                    const SnackBar(content: Text('Task updated')),
-                  );
-                  nav.pop();
-                } catch (e) {
-                  if (!mounted) return;
-                  messenger.showSnackBar(
-                    SnackBar(content: Text('Failed to edit task: $e')),
-                  );
-                }
-              }
-            },
-            child: const Text('Update Task'),
           ),
+          const SizedBox(height: 32),
+          Row(
+            children: [
+              Expanded(
+                child: TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                  ),
+                  child: Text(
+                    'Cancel',
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      fontSize: 16,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: accentColor,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    elevation: 0,
+                  ),
+                  onPressed: () async {
+                    if (_taskController.text.isNotEmpty) {
+                      final nav = Navigator.of(context);
+                      try {
+                        final newTitle = _taskController.text.trim();
+                        await _service.updateTask(
+                          task.id,
+                          newTitle,
+                          task.description,
+                          widget.project.id,
+                          widget.project.name,
+                        );
+                        if (!mounted) return;
+                        AppUI.showSnackBar(
+                          context, 
+                          'Task updated', 
+                          type: SnackBarType.success
+                        );
+                        nav.pop();
+                      } catch (e) {
+                        if (!mounted) return;
+                        AppUI.showSnackBar(
+                          context, 
+                          'Failed to edit task: $e', 
+                          type: SnackBarType.error
+                        );
+                      }
+                    }
+                  },
+                  child: const Text('Update Task', style: TextStyle(fontWeight: FontWeight.bold)),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
         ],
       ),
     );
   }
 
   void _deleteTask(Task task) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor:
-            Theme.of(context).dialogTheme.backgroundColor ??
-            Theme.of(context).colorScheme.surface,
-        title: Text(
-          'Delete Task',
-          style: TextStyle(color: Theme.of(context).colorScheme.onSurface),
-        ),
-        content: Text(
-          'Delete "${task.title}"?',
-          style: TextStyle(
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: Text(
-              'Cancel',
-              style: TextStyle(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
-            ),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text(
-              'Delete',
-              style: TextStyle(color: Colors.redAccent),
-            ),
-          ),
-        ],
-      ),
+    final confirmed = await AppUI.showConfirmDialog(
+      context,
+      title: 'Delete Task',
+      body: 'Delete "${task.title}"?',
+      confirmLabel: 'Delete',
+      confirmColor: Colors.redAccent,
     );
+    
     if (!mounted) return;
-    if (confirmed == true) {
+    if (confirmed) {
       try {
         await _service.deleteTask(task.id);
         if (!mounted) return;
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Task deleted')));
+        AppUI.showSnackBar(
+          context, 
+          'Task deleted', 
+          type: SnackBarType.success
+        );
       } catch (e) {
         if (!mounted) return;
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Failed to delete task: $e')));
+        AppUI.showSnackBar(
+          context, 
+          'Failed to delete task: $e', 
+          type: SnackBarType.error
+        );
       }
     }
   }
@@ -387,8 +384,23 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen> {
                               size: 28,
                             ),
                             onPressed: () async {
-                              final messenger = ScaffoldMessenger.of(context);
                               try {
+                                // Check for existing running timer
+                                final hasRunning = await _service.hasRunningTimer();
+
+                                if (hasRunning) {
+                                  if (!context.mounted) return;
+                                  final shouldStart = await AppUI.showConfirmDialog(
+                                    context,
+                                    title: 'Timer Running',
+                                    body: 'Another timer is currently running. Stop it and start this one?',
+                                    confirmLabel: 'Start New',
+                                    confirmColor: Colors.amber,
+                                  );
+
+                                  if (!shouldStart) return;
+                                }
+
                                 await _service.startTimer(
                                   task.id,
                                   task.title,
@@ -397,19 +409,17 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen> {
                                 if (!mounted) {
                                   return;
                                 }
-                                messenger.showSnackBar(
-                                  SnackBar(
-                                    content: Text(
-                                      'Timer started for ${task.title}!',
-                                    ),
-                                    duration: const Duration(seconds: 2),
-                                  ),
+                                AppUI.showSnackBar(
+                                  context, 
+                                  'Timer started for ${task.title}!', 
+                                  type: SnackBarType.success
                                 );
                               } catch (e) {
-                                messenger.showSnackBar(
-                                  SnackBar(
-                                    content: Text('Failed to start timer: $e'),
-                                  ),
+                                if (!mounted) return;
+                                AppUI.showSnackBar(
+                                  context, 
+                                  'Failed to start timer: $e', 
+                                  type: SnackBarType.error
                                 );
                               }
                             },

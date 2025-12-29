@@ -2,19 +2,93 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:csv/csv.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:hive_flutter/hive_flutter.dart';
+import 'dart:async';
 import 'dart:io';
 import '../models/task.dart';
 import '../models/time_entry.dart';
 import '../models/category.dart';
 import '../models/project.dart';
+import 'local_data_service.dart';
 
 class TimeTrackerService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
+  final LocalDataService _localData = LocalDataService();
+
+  // Singleton
+  static final TimeTrackerService _instance = TimeTrackerService._internal();
+  factory TimeTrackerService() => _instance;
+  TimeTrackerService._internal() {
+    // Initialize sync when service is created (or on first access)
+    // We can also trigger this manually on auth state change
+    _auth.authStateChanges().listen((user) {
+      if (user != null) {
+        _startSync();
+      } else {
+        _stopSync();
+      }
+    });
+  }
+
+  StreamSubscription? _projectSub;
+  StreamSubscription? _taskSub;
+  StreamSubscription? _entrySub;
 
   String get userId => _auth.currentUser?.uid ?? '';
 
-  // ========== PROJECT OPERATIONS (Formerly Categories) ==========
+  void _startSync() {
+    if (userId.isEmpty) return;
+
+    // Sync Projects
+    _projectSub?.cancel();
+    _projectSub = _firestore
+        .collection('projects')
+        .where('userId', isEqualTo: userId)
+        .snapshots()
+        .listen((snapshot) {
+      final projects = snapshot.docs
+          .map((doc) => Project.fromMap(doc.id, doc.data()))
+          .toList();
+      _localData.updateProjects(projects);
+    });
+
+    // Sync Tasks
+    _taskSub?.cancel();
+    _taskSub = _firestore
+        .collection('tasks')
+        .where('userId', isEqualTo: userId)
+        // We sync ALL tasks (even inactive) to local DB so we have a full history if needed
+        .snapshots()
+        .listen((snapshot) {
+      final tasks = snapshot.docs
+          .map((doc) => Task.fromMap(doc.id, doc.data()))
+          .toList();
+      _localData.updateTasks(tasks);
+    });
+
+    // Sync Time Entries (The heavy one)
+    _entrySub?.cancel();
+    _entrySub = _firestore
+        .collection('time_entries')
+        .where('userId', isEqualTo: userId)
+        .snapshots()
+        .listen((snapshot) {
+      final entries = snapshot.docs
+          .map((doc) => TimeEntry.fromMap(doc.id, doc.data()))
+          .toList();
+      _localData.updateTimeEntries(entries);
+    });
+  }
+
+  void _stopSync() {
+    _projectSub?.cancel();
+    _taskSub?.cancel();
+    _entrySub?.cancel();
+    _localData.clearAll();
+  }
+
+  // ========== PROJECT OPERATIONS ==========
 
   Future<void> createProject(String name, String color) async {
     await _firestore.collection('projects').add({
@@ -26,21 +100,13 @@ class TimeTrackerService {
   }
 
   Stream<List<Project>> getProjects() {
-    return _firestore
-        .collection('projects')
-        .where('userId', isEqualTo: userId)
-        .snapshots()
-        .map((snapshot) {
-          return snapshot.docs
-              .map((doc) => Project.fromMap(doc.id, doc.data()))
-              .toList();
-        });
+    // Return stream from Hive for instant load
+    return Hive.box('projects').watch().map((_) => _localData.getProjects()).startWith(_localData.getProjects());
   }
 
   Future<void> deleteProject(String id) async {
-    // Ideally we should check for tasks in this project first or cascade delete
-    // For now, keeping it simple as per requirements
     await _firestore.collection('projects').doc(id).delete();
+    await _localData.deleteProject(id); // Optimistic update
   }
 
   Future<void> updateProject(String id, String name, String color) async {
@@ -48,13 +114,11 @@ class TimeTrackerService {
       'name': name,
       'color': color,
     });
+    // Optimistic update logic could go here, but listener usually catches it fast enough
   }
 
-  // Keeping Category methods for backward compatibility if needed,
-  // but logically we are shifting to Projects.
-  // ... [Legacy Category Methods omitted to encourage Project use] ...
   Stream<List<Category>> getCategories() {
-    // Shim: Return projects as categories for UI compatibility during refactor
+    // Shim using Projects from Hive
     return getProjects().map(
       (projects) => projects
           .map(
@@ -79,24 +143,22 @@ class TimeTrackerService {
   }
 
   Stream<int> getDailyGoal() {
+    // This one is light, keep as is or cache in settings box
     return _firestore.collection('user_settings').doc(userId).snapshots().map((
       snapshot,
     ) {
-      if (!snapshot.exists) return 8 * 3600; // Default 8 hours
+      if (!snapshot.exists) return 8 * 3600;
       return (snapshot.data()?['dailyGoal'] ?? 8 * 3600) as int;
     });
   }
 
   // ========== TASK OPERATIONS ==========
 
-  // Create a new task linked to a Project (category field used as project ID/Name storage for simplicity, or we add projectId)
-  // To keep it simple in transition, 'category' field in Task will store the Project Name,
-  // and we'll add 'projectId' as a new field.
   Future<void> createTask(
     String title,
     String description,
     String projectId,
-    String projectName, // Using this for display and 'category' field compat
+    String projectName,
     String color,
   ) async {
     await _firestore.collection('tasks').add({
@@ -104,65 +166,55 @@ class TimeTrackerService {
       'title': title,
       'description': description,
       'projectId': projectId,
-      'category':
-          projectName, // Maintaining legacy field for stats compatibility
+      'category': projectName,
       'color': color,
       'createdAt': DateTime.now().millisecondsSinceEpoch,
       'isActive': true,
     });
   }
 
-  // Get all tasks for current user
+  // Get active tasks from Hive
   Stream<List<Task>> getTasks() {
-    return _firestore
-        .collection('tasks')
-        .where('userId', isEqualTo: userId)
-        .where('isActive', isEqualTo: true)
-        .snapshots()
-        .map((snapshot) {
-          final tasks = snapshot.docs
-              .map((doc) => Task.fromMap(doc.id, doc.data()))
-              .toList();
-          tasks.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-          return tasks;
-        });
+    return Hive.box('tasks').watch().map((_) {
+      final tasks = _localData.getTasks().where((t) => t.isActive).toList();
+      tasks.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      return tasks;
+    }).startWith(
+        _localData.getTasks().where((t) => t.isActive).toList()
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt))
+    );
   }
 
-  // Get tasks for a specific Project
   Stream<List<Task>> getTasksByProject(String projectId) {
-    return _firestore
-        .collection('tasks')
-        .where('userId', isEqualTo: userId)
-        .where('projectId', isEqualTo: projectId)
-        .where('isActive', isEqualTo: true)
-        .snapshots()
-        .map((snapshot) {
-          final tasks = snapshot.docs
-              .map((doc) => Task.fromMap(doc.id, doc.data()))
-              .toList();
-          tasks.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-          return tasks;
-        });
+    return Hive.box('tasks').watch().map((_) {
+      final tasks = _localData.getTasks()
+          .where((t) => t.projectId == projectId && t.isActive)
+          .toList();
+      tasks.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      return tasks;
+    }).startWith(
+        _localData.getTasks()
+          .where((t) => t.projectId == projectId && t.isActive)
+          .toList()
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt))
+    );
   }
 
-  // Get tasks without a project (Inbox)
   Stream<List<Task>> getInboxTasks() {
-    return _firestore
-        .collection('tasks')
-        .where('userId', isEqualTo: userId)
-        .where('projectId', isEqualTo: '')
-        .where('isActive', isEqualTo: true)
-        .snapshots()
-        .map((snapshot) {
-          final tasks = snapshot.docs
-              .map((doc) => Task.fromMap(doc.id, doc.data()))
-              .toList();
-          tasks.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-          return tasks;
-        });
+    return Hive.box('tasks').watch().map((_) {
+      final tasks = _localData.getTasks()
+          .where((t) => (t.projectId.isEmpty) && t.isActive)
+          .toList();
+      tasks.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      return tasks;
+    }).startWith(
+        _localData.getTasks()
+          .where((t) => (t.projectId.isEmpty) && t.isActive)
+          .toList()
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt))
+    );
   }
 
-  // Update task
   Future<void> updateTask(
     String taskId,
     String title,
@@ -178,14 +230,12 @@ class TimeTrackerService {
     });
   }
 
-  // Delete task (soft delete)
   Future<void> deleteTask(String taskId) async {
     await _firestore.collection('tasks').doc(taskId).update({
       'isActive': false,
     });
   }
 
-  // Undo delete task
   Future<void> undoDeleteTask(String taskId) async {
     await _firestore.collection('tasks').doc(taskId).update({
       'isActive': true,
@@ -194,7 +244,6 @@ class TimeTrackerService {
 
   // ========== TIME ENTRY OPERATIONS ==========
 
-  // Start timer for a task
   Future<String> startTimer(
     String taskId,
     String taskTitle,
@@ -202,7 +251,6 @@ class TimeTrackerService {
     int? expectedDuration,
     String source = 'manual',
   }) async {
-    // Stop any running timer first
     await stopAllRunningTimers();
 
     final doc = await _firestore.collection('time_entries').add({
@@ -221,7 +269,6 @@ class TimeTrackerService {
     return doc.id;
   }
 
-  // Stop timer
   Future<void> stopTimer(String entryId) async {
     final doc = await _firestore.collection('time_entries').doc(entryId).get();
     if (!doc.exists) return;
@@ -238,7 +285,6 @@ class TimeTrackerService {
     });
   }
 
-  // Stop all running timers
   Future<void> stopAllRunningTimers() async {
     final runningTimers = await _firestore
         .collection('time_entries')
@@ -266,24 +312,28 @@ class TimeTrackerService {
     await batch.commit();
   }
 
-  // Get currently running timer
-  Stream<TimeEntry?> getRunningTimer() {
-    return _firestore
+  Future<bool> hasRunningTimer() async {
+    // Keep this check against Firestore to ensure accuracy across devices
+    final snapshot = await _firestore
         .collection('time_entries')
         .where('userId', isEqualTo: userId)
         .where('isRunning', isEqualTo: true)
         .limit(1)
-        .snapshots()
-        .map((snapshot) {
-          if (snapshot.docs.isEmpty) return null;
-          return TimeEntry.fromMap(
-            snapshot.docs.first.id,
-            snapshot.docs.first.data(),
-          );
-        });
+        .get();
+    return snapshot.docs.isNotEmpty;
   }
 
-  // Get time entries for a specific date range
+  Stream<TimeEntry?> getRunningTimer() {
+    // This needs real-time accuracy, keep Firestore stream or use filtered Hive stream
+    // Using Hive stream allows for offline support
+    return Hive.box('time_entries').watch().map((_) {
+      final entries = _localData.getTimeEntries().where((e) => e.isRunning).toList();
+      return entries.isNotEmpty ? entries.first : null;
+    }).startWith(
+        _localData.getTimeEntries().where((e) => e.isRunning).firstOrNull
+    );
+  }
+
   Stream<List<TimeEntry>> getTimeEntries(DateTime startDate, DateTime endDate) {
     final startOfDay = DateTime(startDate.year, startDate.month, startDate.day);
     final endOfDay = DateTime(
@@ -295,64 +345,106 @@ class TimeTrackerService {
       59,
     );
 
-    // Fetch all user entries and filter client-side to avoid composite index requirements
-    return _firestore
-        .collection('time_entries')
-        .where('userId', isEqualTo: userId)
-        .snapshots()
-        .map((snapshot) {
-          final entries = snapshot.docs
-              .map((doc) => TimeEntry.fromMap(doc.id, doc.data()))
-              .where((entry) {
-                return entry.startTime.millisecondsSinceEpoch >=
-                        startOfDay.millisecondsSinceEpoch &&
-                    entry.startTime.millisecondsSinceEpoch <=
-                        endOfDay.millisecondsSinceEpoch;
-              })
-              .toList();
-          // Sort by start time
-          entries.sort((a, b) => b.startTime.compareTo(a.startTime));
-          return entries;
-        });
+    // Optimized: Read from Hive instead of Firestore
+    return Hive.box('time_entries').watch().map((_) {
+      return _filterTimeEntries(startOfDay, endOfDay);
+    }).startWith(_filterTimeEntries(startOfDay, endOfDay));
   }
 
-  // Get today's time entries
+  List<TimeEntry> _filterTimeEntries(DateTime start, DateTime end) {
+    final entries = _localData.getTimeEntries().where((entry) {
+        return entry.startTime.millisecondsSinceEpoch >=
+                start.millisecondsSinceEpoch &&
+            entry.startTime.millisecondsSinceEpoch <=
+                end.millisecondsSinceEpoch;
+      })
+      .toList();
+    entries.sort((a, b) => b.startTime.compareTo(a.startTime));
+    return entries;
+  }
+
   Stream<List<TimeEntry>> getTodayEntries() {
     final now = DateTime.now();
     return getTimeEntries(now, now);
   }
 
-  // Get this week's time entries
   Stream<List<TimeEntry>> getWeekEntries() {
     final now = DateTime.now();
     final startOfWeek = now.subtract(Duration(days: now.weekday - 1));
     return getTimeEntries(startOfWeek, now);
   }
 
-  // ========== ANALYTICS ==========
+  // ========== ANALYTICS (Optimized to use Local Data) ==========
 
-  // Get total time for today by category
+  Future<Map<String, int>> getCategoryBreakdown(DateTime start, DateTime end) async {
+    final entries = _localData.getTimeEntries();
+    final Map<String, int> categoryTime = {};
+
+    final startMs = start.millisecondsSinceEpoch;
+    final endMs = end.millisecondsSinceEpoch;
+
+    for (var data in entries) {
+      if (data.startTime.millisecondsSinceEpoch >= startMs && 
+          data.startTime.millisecondsSinceEpoch <= endMs) {
+        
+        // Handle entries that might span across the range boundary (simplified: just check start time)
+        // For strict reporting, we should clip duration, but for now strict start time inclusion is fine.
+        final category = data.category.isEmpty ? 'Uncategorized' : data.category;
+        final duration = data.duration;
+        categoryTime[category] = (categoryTime[category] ?? 0) + duration;
+      }
+    }
+    return categoryTime;
+  }
+
+  Future<List<Map<String, dynamic>>> getDailyBreakdown(DateTime start, DateTime end) async {
+    final entries = _localData.getTimeEntries();
+    final List<Map<String, dynamic>> dailyData = [];
+
+    // Normalize dates to midnight
+    DateTime current = DateTime(start.year, start.month, start.day);
+    final last = DateTime(end.year, end.month, end.day);
+
+    while (current.isBefore(last) || current.isAtSameMomentAs(last)) {
+      final nextDay = current.add(const Duration(days: 1));
+      final currentMs = current.millisecondsSinceEpoch;
+      final nextDayMs = nextDay.millisecondsSinceEpoch;
+
+      int totalDuration = 0;
+      for (var e in entries) {
+        // Simple check: entry starts on this day
+        if (e.startTime.millisecondsSinceEpoch >= currentMs && 
+            e.startTime.millisecondsSinceEpoch < nextDayMs) {
+          totalDuration += e.duration;
+        }
+      }
+
+      dailyData.add({
+        'date': current,
+        'duration': totalDuration,
+        'hours': totalDuration / 3600.0,
+      });
+
+      current = nextDay;
+    }
+    return dailyData;
+  }
+
   Future<Map<String, int>> getTodayTimeByCategory() async {
     final now = DateTime.now();
     final startOfDay = DateTime(now.year, now.month, now.day);
     final endOfDay = DateTime(now.year, now.month, now.day, 23, 59, 59);
 
-    final entries = await _firestore
-        .collection('time_entries')
-        .where('userId', isEqualTo: userId)
-        .get();
+    final entries = _localData.getTimeEntries();
 
     final Map<String, int> categoryTime = {};
 
-    for (var doc in entries.docs) {
-      final data = doc.data();
-      final startTimeMs = data['startTime'] as int? ?? 0;
-      
-      if (startTimeMs >= startOfDay.millisecondsSinceEpoch && 
-          startTimeMs <= endOfDay.millisecondsSinceEpoch) {
+    for (var data in entries) {
+      if (data.startTime.millisecondsSinceEpoch >= startOfDay.millisecondsSinceEpoch && 
+          data.startTime.millisecondsSinceEpoch <= endOfDay.millisecondsSinceEpoch) {
           
-        final category = data['category'] ?? 'Uncategorized';
-        final duration = (data['duration'] ?? 0) as int;
+        final category = data.category;
+        final duration = data.duration;
         categoryTime[category] = (categoryTime[category] ?? 0) + duration;
       }
     }
@@ -360,7 +452,6 @@ class TimeTrackerService {
     return categoryTime;
   }
 
-  // Get weekly summary
   Future<List<Map<String, dynamic>>> getWeeklySummary() async {
     final now = DateTime.now();
     final startOfWeek = now.subtract(Duration(days: now.weekday - 1));
@@ -375,15 +466,8 @@ class TimeTrackerService {
 
     final List<Map<String, dynamic>> summary = [];
 
-    // Fetch all entries for user
-    final weekEntriesSnapshot = await _firestore
-        .collection('time_entries')
-        .where('userId', isEqualTo: userId)
-        .get();
-
-    final weekEntries = weekEntriesSnapshot.docs
-            .map((doc) => TimeEntry.fromMap(doc.id, doc.data()))
-            .where((entry) {
+    // Use local data
+    final weekEntries = _localData.getTimeEntries().where((entry) {
               return entry.startTime.millisecondsSinceEpoch >= 
                      startOfWeekMidnight.millisecondsSinceEpoch &&
                      entry.startTime.millisecondsSinceEpoch <= 
@@ -416,10 +500,8 @@ class TimeTrackerService {
     return summary;
   }
 
-  // Get summary for the last 30 days (for heatmap)
   Future<List<Map<String, dynamic>>> getThirtyDaySummary() async {
     final now = DateTime.now();
-    // Start from 29 days ago to include today (30 days total)
     final startOfPeriod = now.subtract(const Duration(days: 29));
     final startOfPeriodMidnight = DateTime(
       startOfPeriod.year,
@@ -437,15 +519,8 @@ class TimeTrackerService {
 
     final List<Map<String, dynamic>> summary = [];
 
-    // Fetch all entries for user
-    final entriesSnapshot = await _firestore
-        .collection('time_entries')
-        .where('userId', isEqualTo: userId)
-        .get();
-
-    final entries = entriesSnapshot.docs
-            .map((doc) => TimeEntry.fromMap(doc.id, doc.data()))
-            .where((entry) {
+    // Use local data
+    final entries = _localData.getTimeEntries().where((entry) {
               return entry.startTime.millisecondsSinceEpoch >= 
                      startOfPeriodMidnight.millisecondsSinceEpoch &&
                      entry.startTime.millisecondsSinceEpoch <= 
@@ -453,7 +528,6 @@ class TimeTrackerService {
             })
             .toList();
 
-    // Generate last 30 days
     for (int i = 0; i < 30; i++) {
       final date = startOfPeriod.add(Duration(days: i));
       final startOfDay = DateTime(date.year, date.month, date.day);
@@ -471,7 +545,7 @@ class TimeTrackerService {
 
       summary.add({
         'date': date,
-        'duration': totalDuration, // in seconds
+        'duration': totalDuration,
         'hours': (totalDuration / 3600),
       });
     }
@@ -479,98 +553,87 @@ class TimeTrackerService {
     return summary;
   }
 
-  // Get hourly productivity for a specific day
   Future<List<double>> getHourlyProductivity(DateTime date) async {
     final startOfDay = DateTime(date.year, date.month, date.day);
     final endOfDay = DateTime(date.year, date.month, date.day, 23, 59, 59);
 
-    final snapshot = await _firestore
-        .collection('time_entries')
-        .where('userId', isEqualTo: userId)
-        .get();
+    final entries = _localData.getTimeEntries();
 
     List<double> hourlyBuckets = List.filled(24, 0.0);
 
-    for (var doc in snapshot.docs) {
-      final data = doc.data();
-      final startTime = DateTime.fromMillisecondsSinceEpoch(
-        data['startTime'] ?? 0,
-      );
-      final duration = (data['duration'] ?? 0) as int;
+    for (var entry in entries) {
+      final startTime = entry.startTime;
+      final duration = entry.duration;
 
-      // Double check range
       if (startTime.isAfter(startOfDay.subtract(const Duration(seconds: 1))) &&
           startTime.isBefore(endOfDay.add(const Duration(seconds: 1)))) {
         int hour = startTime.hour;
-        hourlyBuckets[hour] += duration / 60.0; // In minutes
+        hourlyBuckets[hour] += duration / 60.0;
       }
     }
 
     return hourlyBuckets;
   }
 
-  // Get filtered entries for the reports screen
+  // Optimize: Use Hive watch()
   Stream<List<TimeEntry>> getFilteredEntries({
     String? query,
     String? category,
     DateTime? startDate,
     DateTime? endDate,
   }) {
-    // Only filter by userId in Firestore to avoid index issues
-    Query<Map<String, dynamic>> queryRef = _firestore
-        .collection('time_entries')
-        .where('userId', isEqualTo: userId);
-
-    return queryRef.snapshots().map((snapshot) {
-      var entries = snapshot.docs
-          .map((doc) => TimeEntry.fromMap(doc.id, doc.data()))
-          .toList();
-
-      // Client-side filtering
-      
-      // Range filter
-      if (startDate != null) {
-        final s = DateTime(startDate.year, startDate.month, startDate.day);
-        entries = entries.where((e) => 
-            e.startTime.millisecondsSinceEpoch >= s.millisecondsSinceEpoch
-        ).toList();
-      }
-      
-      if (endDate != null) {
-        final endOfDay = DateTime(
-          endDate.year,
-          endDate.month,
-          endDate.day,
-          23,
-          59,
-          59,
-        );
-        entries = entries.where((e) => 
-            e.startTime.millisecondsSinceEpoch <= endOfDay.millisecondsSinceEpoch
-        ).toList();
-      }
-
-      // Category filter
-      if (category != null && category != 'All') {
-        entries = entries.where((e) => e.category == category).toList();
-      }
-
-      // Text query filter
-      if (query != null && query.isNotEmpty) {
-        entries = entries
-            .where(
-              (e) => e.taskTitle.toLowerCase().contains(query.toLowerCase()),
-            )
-            .toList();
-      }
-
-      // Sort by start time
-      entries.sort((a, b) => b.startTime.compareTo(a.startTime));
-      return entries;
-    });
+    return Hive.box('time_entries').watch().map((_) {
+      return _getFilteredEntriesList(query: query, category: category, startDate: startDate, endDate: endDate);
+    }).startWith(
+      _getFilteredEntriesList(query: query, category: category, startDate: startDate, endDate: endDate)
+    );
   }
 
-  // Log a Pomodoro session
+  List<TimeEntry> _getFilteredEntriesList({
+    String? query,
+    String? category,
+    DateTime? startDate,
+    DateTime? endDate,
+  }) {
+    var entries = _localData.getTimeEntries();
+
+    if (startDate != null) {
+      final s = DateTime(startDate.year, startDate.month, startDate.day);
+      entries = entries.where((e) => 
+          e.startTime.millisecondsSinceEpoch >= s.millisecondsSinceEpoch
+      ).toList();
+    }
+    
+    if (endDate != null) {
+      final endOfDay = DateTime(
+        endDate.year,
+        endDate.month,
+        endDate.day,
+        23,
+        59,
+        59,
+      );
+      entries = entries.where((e) => 
+          e.startTime.millisecondsSinceEpoch <= endOfDay.millisecondsSinceEpoch
+      ).toList();
+    }
+
+    if (category != null && category != 'All') {
+      entries = entries.where((e) => e.category == category).toList();
+    }
+
+    if (query != null && query.isNotEmpty) {
+      entries = entries
+          .where(
+            (e) => e.taskTitle.toLowerCase().contains(query.toLowerCase()),
+          )
+          .toList();
+    }
+
+    entries.sort((a, b) => b.startTime.compareTo(a.startTime));
+    return entries;
+  }
+
   Future<void> logPomodoroSession(
     String taskId,
     String taskTitle,
@@ -580,7 +643,6 @@ class TimeTrackerService {
     await logTimeEntry(taskId, taskTitle, category, durationSeconds);
   }
 
-  // Generic log time entry
   Future<void> logTimeEntry(
     String taskId,
     String taskTitle,
@@ -605,14 +667,11 @@ class TimeTrackerService {
   // ========== EXPORT ==========
 
   Future<String> exportToCSV() async {
-    final snapshot = await _firestore
-        .collection('time_entries')
-        .where('userId', isEqualTo: userId)
-        .get();
+    // Export from local data
+    final entries = _localData.getTimeEntries();
 
     List<List<dynamic>> rows = [];
 
-    // Header
     rows.add([
       'Date',
       'Task',
@@ -623,24 +682,15 @@ class TimeTrackerService {
       'Duration (min)',
     ]);
 
-    for (var doc in snapshot.docs) {
-      final data = doc.data();
-      final startTime = DateTime.fromMillisecondsSinceEpoch(
-        data['startTime'] ?? 0,
-      );
-      final endTime = data['endTime'] != null
-          ? DateTime.fromMillisecondsSinceEpoch(data['endTime'])
-          : null;
-      final duration = data['duration'] ?? 0;
-
+    for (var entry in entries) {
       rows.add([
-        startTime.toIso8601String().split('T')[0],
-        data['taskTitle'] ?? '',
-        data['category'] ?? '',
-        startTime.toIso8601String(),
-        endTime?.toIso8601String() ?? 'Running',
-        duration,
-        (duration / 60).toStringAsFixed(2),
+        entry.startTime.toIso8601String().split('T')[0],
+        entry.taskTitle,
+        entry.category,
+        entry.startTime.toIso8601String(),
+        entry.endTime?.toIso8601String() ?? 'Running',
+        entry.duration,
+        (entry.duration / 60).toStringAsFixed(2),
       ]);
     }
 
@@ -653,3 +703,12 @@ class TimeTrackerService {
     return file.path;
   }
 }
+
+// Extension to help with stream starting value
+extension StreamStartWith<T> on Stream<T> {
+  Stream<T> startWith(T value) async* {
+    yield value;
+    yield* this;
+  }
+}
+

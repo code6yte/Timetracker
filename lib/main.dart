@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 import 'firebase_options.dart';
 import 'login_page.dart';
 import 'screens/home_screen.dart';
@@ -9,13 +11,26 @@ import 'theme_controller.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   try {
+    await Hive.initFlutter();
+    
+    // Open boxes for local caching
+    await Hive.openBox('settings');
+    await Hive.openBox('projects');
+    await Hive.openBox('tasks');
+    await Hive.openBox('time_entries');
+
     if (Firebase.apps.isEmpty) {
       await Firebase.initializeApp(
         options: DefaultFirebaseOptions.currentPlatform,
       );
+      // Enable offline persistence explicitly
+      FirebaseFirestore.instance.settings = const Settings(
+        persistenceEnabled: true,
+        cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
+      );
     }
   } catch (e) {
-    debugPrint("Firebase initialization error: $e");
+    debugPrint("Initialization error: $e");
   }
   runApp(const MyApp());
 }
@@ -32,7 +47,7 @@ class MyApp extends StatelessWidget {
       builder: (context, _) {
         return MaterialApp(
           debugShowCheckedModeBanner: false,
-          title: 'Smart Time Tracker',
+          title: 'Timely',
           themeMode: themeController.themeMode,
           theme: ThemeData(
             primarySwatch: Colors.blue,

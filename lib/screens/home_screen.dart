@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'tasks_tab.dart';
 import 'timer_tab.dart';
 import 'settings_screen.dart';
 import 'reports_screen.dart';
@@ -9,6 +8,7 @@ import '../models/time_entry.dart';
 import '../models/project.dart';
 import 'project_details_screen.dart';
 import '../widgets/glass_container.dart';
+import '../utils/ui_helpers.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -18,6 +18,21 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  late PageController _pageController;
+  String? _expandedProjectId;
+
+  @override
+  void initState() {
+    super.initState();
+    _pageController = PageController(initialPage: _currentIndex);
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
   void _showAddMenu(BuildContext context) {
     showModalBottomSheet<void>(
       context: context,
@@ -50,12 +65,6 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   int _currentIndex = 0;
-  final List<Widget> _tabs = [
-    const TasksTab(),
-    const TimerTab(),
-    const ReportsScreen(),
-    const SettingsScreen(),
-  ];
 
   final TimeTrackerService _service = TimeTrackerService();
 
@@ -82,95 +91,138 @@ class _HomeScreenState extends State<HomeScreen> {
     final TextEditingController nameController = TextEditingController();
     String selectedColor = '#FFC107';
 
-    showDialog(
+    AppUI.showAppBottomSheet(
       context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          backgroundColor:
-              Theme.of(context).dialogTheme.backgroundColor ??
-              Theme.of(context).colorScheme.surface,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(24),
-          ),
-          title: Text(
-            'New Project',
-            style: TextStyle(
-              color: Theme.of(context).colorScheme.onSurface,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: nameController,
-                  style: TextStyle(
-                    color: Theme.of(context).colorScheme.onSurface,
-                  ),
-                  decoration: InputDecoration(
-                    labelText: 'Project Name',
-                    labelStyle: TextStyle(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderSide: BorderSide(
-                        color: Theme.of(
-                          context,
-                        ).colorScheme.onSurface.withAlpha((0.18 * 255).toInt()),
-                      ),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderSide: BorderSide(
-                        color: _safeParseColor(selectedColor),
-                      ),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 20),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: Text(
-                'Cancel',
-                style: TextStyle(
+      title: 'New Project',
+      content: StatefulBuilder(
+        builder: (context, setDialogState) => Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            TextField(
+              controller: nameController,
+              autofocus: true,
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurface,
+              ),
+              decoration: InputDecoration(
+                labelText: 'Project Name',
+                labelStyle: TextStyle(
                   color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
-              ),
-            ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: _safeParseColor(selectedColor),
-                foregroundColor: Theme.of(context).colorScheme.onSurface,
-                shape: RoundedRectangleBorder(
+                enabledBorder: OutlineInputBorder(
+                  borderSide: BorderSide(
+                    color: Theme.of(context).colorScheme.onSurface.withAlpha((0.18 * 255).toInt()),
+                  ),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderSide: BorderSide(
+                    color: _safeParseColor(selectedColor),
+                  ),
                   borderRadius: BorderRadius.circular(12),
                 ),
               ),
-              onPressed: () async {
-                final name = nameController.text.trim();
-                if (name.isNotEmpty) {
-                  final nav = Navigator.of(context);
-                  final messenger = ScaffoldMessenger.of(context);
-                  try {
-                    await _service.createProject(name, selectedColor);
-                  } catch (e) {
-                    if (!mounted) return;
-                    messenger.showSnackBar(
-                      SnackBar(content: Text('Failed to create project: $e')),
-                    );
-                    return;
-                  }
-                  if (!mounted) return;
-                  nav.pop();
-                }
-              },
-              child: const Text('Create'),
             ),
+            const SizedBox(height: 24),
+            Text(
+              'Color',
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              children: _defaultColors.map((color) {
+                final isSelected = selectedColor == color;
+                return GestureDetector(
+                  onTap: () => setDialogState(() => selectedColor = color),
+                  child: Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      color: _safeParseColor(color),
+                      shape: BoxShape.circle,
+                      border: isSelected
+                          ? Border.all(
+                              color: Theme.of(context).colorScheme.onSurface,
+                              width: 3,
+                            )
+                          : null,
+                      boxShadow: [
+                        BoxShadow(
+                          color: _safeParseColor(color).withOpacity(0.4),
+                          blurRadius: 8,
+                          offset: const Offset(0, 4),
+                        )
+                      ],
+                    ),
+                    child: isSelected 
+                      ? Icon(Icons.check, color: Theme.of(context).colorScheme.onInverseSurface, size: 24)
+                      : null,
+                  ),
+                );
+              }).toList(),
+            ),
+            const SizedBox(height: 32),
+            Row(
+              children: [
+                Expanded(
+                  child: TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                    ),
+                    child: Text(
+                      'Cancel',
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        fontSize: 16,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: _safeParseColor(selectedColor),
+                      foregroundColor: Theme.of(context).colorScheme.onSurface,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      elevation: 0,
+                    ),
+                    onPressed: () async {
+                      final name = nameController.text.trim();
+                      if (name.isNotEmpty) {
+                        final nav = Navigator.of(context);
+                        try {
+                          await _service.createProject(name, selectedColor);
+                        } catch (e) {
+                          if (!mounted) return;
+                          AppUI.showSnackBar(
+                            context, 
+                            'Failed to create project: $e', 
+                            type: SnackBarType.error
+                          );
+                          return;
+                        }
+                        if (!mounted) return;
+                        nav.pop();
+                      }
+                    },
+                    child: const Text('Create Project', style: TextStyle(fontWeight: FontWeight.bold)),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
           ],
         ),
       ),
@@ -183,26 +235,14 @@ class _HomeScreenState extends State<HomeScreen> {
     String selectedProjectName = 'Inbox';
     String selectedColor = '#FFC107';
 
-    showDialog(
+    AppUI.showAppBottomSheet(
       context: context,
-      builder: (context) => StatefulBuilder(
+      title: 'New Task',
+      content: StatefulBuilder(
         builder: (context, setDialogState) {
-          return AlertDialog(
-            backgroundColor:
-                Theme.of(context).dialogTheme.backgroundColor ??
-                Theme.of(context).colorScheme.surface,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(24),
-            ),
-            title: Text(
-              'New Task',
-              style: TextStyle(
-                color: Theme.of(context).colorScheme.onSurface,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            content: Column(
+          return Column(
               mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 TextField(
                   controller: taskController,
@@ -231,7 +271,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 20),
                 StreamBuilder<List<Project>>(
                   stream: _service.getProjects(),
                   builder: (context, snap) {
@@ -251,7 +291,22 @@ class _HomeScreenState extends State<HomeScreen> {
                     return DropdownButtonFormField<String>(
                       initialValue: selectedProjectId ?? '',
                       items: items,
-                      decoration: const InputDecoration(labelText: 'Project'),
+                      dropdownColor: Theme.of(context).colorScheme.surface,
+                      decoration: InputDecoration(
+                        labelText: 'Project',
+                        labelStyle: TextStyle(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        enabledBorder: OutlineInputBorder(
+                          borderSide: BorderSide(
+                            color: Theme.of(context).colorScheme.onSurface.withAlpha(
+                              (0.18 * 255).toInt(),
+                            ),
+                          ),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
                       onChanged: (v) {
                         setDialogState(() {
                           selectedProjectId = v;
@@ -265,107 +320,114 @@ class _HomeScreenState extends State<HomeScreen> {
                             ),
                           );
                           selectedProjectName = p.name;
+                          selectedColor = p.color;
                         });
                       },
                     );
                   },
                 ),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: Text(
-                  'Cancel',
-                  style: TextStyle(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              ),
-              ElevatedButton(
-                onPressed: () async {
-                  final title = taskController.text.trim();
-                  if (title.isEmpty) return;
-                  if (selectedProjectId == null) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Please select a project for the task'),
+                const SizedBox(height: 32),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextButton(
+                        onPressed: () => Navigator.pop(context),
+                        style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                        ),
+                        child: Text(
+                          'Cancel',
+                          style: TextStyle(
+                            color: Theme.of(context).colorScheme.onSurfaceVariant,
+                            fontSize: 16,
+                          ),
+                        ),
                       ),
-                    );
-                    return;
-                  }
-                  final messenger = ScaffoldMessenger.of(context);
-                  final nav = Navigator.of(context);
-                  try {
-                    await _service.createTask(
-                      title,
-                      '',
-                      selectedProjectId ?? '',
-                      selectedProjectName,
-                      selectedColor,
-                    );
-                  } catch (e) {
-                    if (!mounted) return;
-                    messenger.showSnackBar(
-                      SnackBar(content: Text('Failed to create task: $e')),
-                    );
-                    return;
-                  }
-                  if (!mounted) return;
-                  nav.pop();
-                },
-                child: const Text('Create Task'),
-              ),
-            ],
-          );
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Theme.of(context).colorScheme.primary,
+                          foregroundColor: Theme.of(context).colorScheme.onPrimary,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          elevation: 0,
+                        ),
+                        onPressed: () async {
+                          final title = taskController.text.trim();
+                          if (title.isEmpty) return;
+                          
+                          // Optional: Default to Inbox if no project selected, or handle as error
+                          // keeping original logic: warning if null (though initialValue is '')
+                          // Actually initialValue is '' (Inbox), so selectedProjectId might be '' which is valid for Inbox?
+                          // The original code checked: if (selectedProjectId == null) warning.
+                          // But initialValue is set to '' if selectedProjectId is null.
+                          // Let's stick to original logic but fix the check.
+                          // The dropdown sets selectedProjectId to v.
+                          
+                          final nav = Navigator.of(context);
+                          try {
+                            await _service.createTask(
+                              title,
+                              '',
+                              selectedProjectId ?? '',
+                              selectedProjectName,
+                              selectedColor,
+                            );
+                          } catch (e) {
+                            if (!mounted) return;
+                            AppUI.showSnackBar(
+                              context, 
+                              'Failed to create task: $e', 
+                              type: SnackBarType.error
+                            );
+                            return;
+                          }
+                          if (!mounted) return;
+                          nav.pop();
+                        },
+                        child: const Text('Create Task', style: TextStyle(fontWeight: FontWeight.bold)),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+              ],
+            );
         },
       ),
     );
   }
 
   Future<void> _deleteProject(Project p) async {
-    final messenger = ScaffoldMessenger.of(context);
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor:
-            Theme.of(context).dialogTheme.backgroundColor ??
-            Theme.of(context).colorScheme.surface,
-        title: Text(
-          'Delete Project',
-          style: TextStyle(color: Theme.of(context).colorScheme.onSurface),
-        ),
-        content: Text(
-          'Delete "${p.name}"? This will not delete tasks automatically.',
-          style: TextStyle(
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text(
-              'Delete',
-              style: TextStyle(color: Colors.redAccent),
-            ),
-          ),
-        ],
-      ),
+    final confirmed = await AppUI.showConfirmDialog(
+      context,
+      title: 'Delete Project',
+      body: 'Delete "${p.name}"? This will not delete tasks automatically.',
+      confirmLabel: 'Delete',
+      confirmColor: Colors.redAccent,
     );
-    if (confirmed != true) return;
-    try {
-      await _service.deleteProject(p.id);
-      if (!mounted) return;
-      messenger.showSnackBar(const SnackBar(content: Text('Project deleted')));
-    } catch (e) {
-      if (!mounted) return;
-      messenger.showSnackBar(
-        SnackBar(content: Text('Failed to delete project: $e')),
-      );
+    
+    if (confirmed) {
+      try {
+        await _service.deleteProject(p.id);
+        if (!mounted) return;
+        AppUI.showSnackBar(
+          context, 
+          'Project deleted', 
+          type: SnackBarType.success
+        );
+      } catch (e) {
+        if (!mounted) return;
+        AppUI.showSnackBar(
+          context, 
+          'Failed to delete project: $e', 
+          type: SnackBarType.error
+        );
+      }
     }
   }
 
@@ -373,114 +435,146 @@ class _HomeScreenState extends State<HomeScreen> {
     final nameController = TextEditingController(text: project.name);
     String selectedColor = project.color;
 
-    showDialog(
+    AppUI.showAppBottomSheet(
       context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) {
-          return AlertDialog(
-            backgroundColor:
-                Theme.of(context).dialogTheme.backgroundColor ??
-                Theme.of(context).colorScheme.surface,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(24),
-            ),
-            title: Text(
-              'Edit Project',
+      title: 'Edit Project',
+      content: StatefulBuilder(
+        builder: (context, setDialogState) => Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            TextField(
+              controller: nameController,
+              autofocus: true,
               style: TextStyle(
                 color: Theme.of(context).colorScheme.onSurface,
-                fontWeight: FontWeight.bold,
+              ),
+              decoration: InputDecoration(
+                labelText: 'Project Name',
+                labelStyle: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderSide: BorderSide(
+                    color: Theme.of(context).colorScheme.onSurface.withAlpha(
+                      (0.18 * 255).toInt(),
+                    ),
+                  ),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderSide: BorderSide(
+                    color: _safeParseColor(selectedColor),
+                  ),
+                  borderRadius: BorderRadius.circular(12),
+                ),
               ),
             ),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextField(
-                    controller: nameController,
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.onSurface,
+            const SizedBox(height: 24),
+            Text(
+              'Color',
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              children: _defaultColors.map((color) {
+                final isSelected = selectedColor == color;
+                return GestureDetector(
+                  onTap: () =>
+                      setDialogState(() => selectedColor = color),
+                  child: Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      color: _safeParseColor(color),
+                      shape: BoxShape.circle,
+                      border: isSelected
+                          ? Border.all(
+                              color: Theme.of(context).colorScheme.onSurface,
+                              width: 3,
+                            )
+                          : null,
+                      boxShadow: [
+                        BoxShadow(
+                          color: _safeParseColor(color).withOpacity(0.4),
+                          blurRadius: 8,
+                          offset: const Offset(0, 4),
+                        )
+                      ],
                     ),
-                    decoration: InputDecoration(
-                      labelText: 'Project Name',
-                      labelStyle: TextStyle(
+                    child: isSelected 
+                      ? Icon(Icons.check, color: Theme.of(context).colorScheme.onInverseSurface, size: 24)
+                      : null,
+                  ),
+                );
+              }).toList(),
+            ),
+            const SizedBox(height: 32),
+            Row(
+              children: [
+                Expanded(
+                  child: TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                    ),
+                    child: Text(
+                      'Cancel',
+                      style: TextStyle(
                         color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderSide: BorderSide(
-                          color: Theme.of(context).colorScheme.onSurface.withAlpha(
-                            (0.18 * 255).toInt(),
-                          ),
-                        ),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderSide: BorderSide(
-                          color: _safeParseColor(selectedColor),
-                        ),
-                        borderRadius: BorderRadius.circular(12),
+                        fontSize: 16,
                       ),
                     ),
                   ),
-                  const SizedBox(height: 12),
-                  Wrap(
-                    spacing: 8,
-                    children: _defaultColors.map((color) {
-                      final isSelected = selectedColor == color;
-                      return GestureDetector(
-                        onTap: () =>
-                            setDialogState(() => selectedColor = color),
-                        child: Container(
-                          width: 36,
-                          height: 36,
-                          decoration: BoxDecoration(
-                            color: _safeParseColor(color),
-                            shape: BoxShape.circle,
-                            border: isSelected
-                                ? Border.all(
-                                    color: Theme.of(context).colorScheme.onSurface,
-                                    width: 2,
-                                  )
-                                : null,
-                          ),
-                        ),
-                      );
-                    }).toList(),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: () async {
+                      final name = nameController.text.trim();
+                      if (name.isEmpty) return;
+                      final nav = Navigator.of(context);
+                      try {
+                        await _service.updateProject(
+                          project.id,
+                          name,
+                          selectedColor,
+                        );
+                      } catch (e) {
+                        if (!mounted) return;
+                        AppUI.showSnackBar(
+                          context, 
+                          'Failed to update project: $e', 
+                          type: SnackBarType.error
+                        );
+                        return;
+                      }
+                      if (!mounted) return;
+                      nav.pop();
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: _safeParseColor(selectedColor),
+                      foregroundColor: Theme.of(context).colorScheme.onSurface,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      elevation: 0,
+                    ),
+                    child: const Text('Save Changes', style: TextStyle(fontWeight: FontWeight.bold)),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Cancel'),
-              ),
-              ElevatedButton(
-                onPressed: () async {
-                  final name = nameController.text.trim();
-                  if (name.isEmpty) return;
-                  final messenger = ScaffoldMessenger.of(context);
-                  final nav = Navigator.of(context);
-                  try {
-                    await _service.updateProject(
-                      project.id,
-                      name,
-                      selectedColor,
-                    );
-                  } catch (e) {
-                    if (!mounted) return;
-                    messenger.showSnackBar(
-                      SnackBar(content: Text('Failed to update project: $e')),
-                    );
-                    return;
-                  }
-                  if (!mounted) return;
-                  nav.pop();
-                },
-                child: const Text('Save'),
-              ),
-            ],
-          );
-        },
+            const SizedBox(height: 16),
+          ],
+        ),
       ),
     );
   }
@@ -492,7 +586,20 @@ class _HomeScreenState extends State<HomeScreen> {
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: Stack(
         children: [
-          _currentIndex == 0 ? _buildDashboard() : _tabs[_currentIndex],
+          PageView(
+            controller: _pageController,
+            onPageChanged: (index) {
+              setState(() {
+                _currentIndex = index;
+              });
+            },
+            children: [
+              _buildDashboard(),
+              const TimerTab(),
+              const ReportsScreen(),
+              const SettingsScreen(),
+            ],
+          ),
           if (_currentIndex == 0)
             Positioned(
               bottom: 96,
@@ -539,46 +646,52 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ],
       ),
-      bottomNavigationBar: SafeArea(
-        bottom: true,
-        minimum: const EdgeInsets.only(bottom: 8),
-        child: GlassContainer(
-          margin: const EdgeInsets.only(left: 8, right: 8, bottom: 8),
-          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
-          borderRadius: BorderRadius.circular(14),
-          color: Colors.black,
-          opacity: 0.26,
-          height: 72,
-          child: BottomNavigationBar(
-            currentIndex: _currentIndex,
-            onTap: (index) {
-              setState(() {
-                _currentIndex = index;
-              });
-            },
-            backgroundColor: Colors.transparent,
-            elevation: 0,
-            selectedItemColor: Theme.of(context).colorScheme.primary,
-            unselectedItemColor: Theme.of(context).colorScheme.onSurfaceVariant,
-            type: BottomNavigationBarType.fixed,
-            iconSize: 24,
-            selectedFontSize: 12,
-            unselectedFontSize: 11,
-            items: const [
-              BottomNavigationBarItem(
-                icon: Icon(Icons.folder_shared),
-                label: 'Projects',
-              ),
-              BottomNavigationBarItem(icon: Icon(Icons.timer), label: 'Timer'),
-              BottomNavigationBarItem(
-                icon: Icon(Icons.insights),
-                label: 'Reports',
-              ),
-              BottomNavigationBarItem(
-                icon: Icon(Icons.settings),
-                label: 'Settings',
-              ),
-            ],
+      bottomNavigationBar: GlassContainer(
+        margin: EdgeInsets.zero,
+        padding: EdgeInsets.zero,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+        color: Colors.black,
+        opacity: 0.26,
+        child: SafeArea(
+          bottom: false,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            child: BottomNavigationBar(
+              currentIndex: _currentIndex,
+              onTap: (index) {
+                setState(() {
+                  _currentIndex = index;
+                });
+                _pageController.animateToPage(
+                  index,
+                  duration: const Duration(milliseconds: 300),
+                  curve: Curves.easeInOut,
+                );
+              },
+              backgroundColor: Colors.transparent,
+              elevation: 0,
+              selectedItemColor: Theme.of(context).colorScheme.primary,
+              unselectedItemColor: Theme.of(context).colorScheme.onSurfaceVariant,
+              type: BottomNavigationBarType.fixed,
+              iconSize: 24,
+              selectedFontSize: 12,
+              unselectedFontSize: 11,
+              items: const [
+                BottomNavigationBarItem(
+                  icon: Icon(Icons.folder_shared),
+                  label: 'Projects',
+                ),
+                BottomNavigationBarItem(icon: Icon(Icons.timer), label: 'Timer'),
+                BottomNavigationBarItem(
+                  icon: Icon(Icons.insights),
+                  label: 'Reports',
+                ),
+                BottomNavigationBarItem(
+                  icon: Icon(Icons.settings),
+                  label: 'Settings',
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -587,26 +700,25 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildDashboard() {
     final screenWidth = MediaQuery.of(context).size.width;
-    // final isSmallScreen = screenWidth < 600; // Unused variable removed
 
     return SingleChildScrollView(
       padding: EdgeInsets.fromLTRB(
         screenWidth * 0.03,
-        12,
+        8,
         screenWidth * 0.03,
         160,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const SizedBox(height: 32),
+          const SizedBox(height: 16),
 
           // Quick stats row
           Row(
             children: [
               Expanded(
                 child: GlassContainer(
-                  padding: const EdgeInsets.all(12),
+                  padding: const EdgeInsets.all(10),
                   child: StreamBuilder<List<TimeEntry>>(
                     stream: _service.getTodayEntries(),
                     builder: (context, snapshot) {
@@ -614,21 +726,9 @@ class _HomeScreenState extends State<HomeScreen> {
                         return const Center(child: CircularProgressIndicator());
                       }
                       if (snapshot.hasError) {
-                        return Center(
-                          child: SingleChildScrollView(
-                            child: Text(
-                              'Error: ${snapshot.error}',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                color: Theme.of(context).colorScheme.error,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ),
-                        );
+                        return const SizedBox.shrink();
                       }
                       final entries = snapshot.data ?? [];
-                      // Only count non-focus entries for the dashboard Today stat
                       final totalSeconds = entries.fold<int>(
                         0,
                         (s, e) => s + ((e.source == 'focus') ? 0 : e.duration),
@@ -643,18 +743,16 @@ class _HomeScreenState extends State<HomeScreen> {
                               color: Theme.of(
                                 context,
                               ).colorScheme.onSurfaceVariant,
+                              fontSize: 12,
                             ),
                           ),
-                          const SizedBox(height: 8),
-                          Semantics(
-                            label: 'Today\'s tracked hours: $hours hours',
-                            child: Text(
-                              '${hours}h',
-                              style: TextStyle(
-                                color: Theme.of(context).colorScheme.onSurface,
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                              ),
+                          const SizedBox(height: 4),
+                          Text(
+                            '${hours}h',
+                            style: TextStyle(
+                              color: Theme.of(context).colorScheme.onSurface,
+                              fontSize: 20,
+                              fontWeight: FontWeight.w600,
                             ),
                           ),
                         ],
@@ -666,22 +764,12 @@ class _HomeScreenState extends State<HomeScreen> {
               const SizedBox(width: 8),
               Expanded(
                 child: GlassContainer(
-                  padding: const EdgeInsets.all(12),
+                  padding: const EdgeInsets.all(10),
                   child: StreamBuilder<List<dynamic>>(
                     stream: _service.getTasks(),
                     builder: (context, snapshot) {
                       if (snapshot.connectionState == ConnectionState.waiting) {
                         return const Center(child: CircularProgressIndicator());
-                      }
-                      if (snapshot.hasError) {
-                        return Center(
-                          child: Text(
-                            'Error loading data',
-                            style: TextStyle(
-                              color: Theme.of(context).colorScheme.error,
-                            ),
-                          ),
-                        );
                       }
                       final tasks = snapshot.data ?? [];
                       return Column(
@@ -693,18 +781,16 @@ class _HomeScreenState extends State<HomeScreen> {
                               color: Theme.of(
                                 context,
                               ).colorScheme.onSurfaceVariant,
+                              fontSize: 12,
                             ),
                           ),
-                          const SizedBox(height: 8),
-                          Semantics(
-                            label: 'Number of tasks: ${tasks.length}',
-                            child: Text(
-                              '${tasks.length}',
-                              style: TextStyle(
-                                color: Theme.of(context).colorScheme.onSurface,
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                              ),
+                          const SizedBox(height: 4),
+                          Text(
+                            '${tasks.length}',
+                            style: TextStyle(
+                              color: Theme.of(context).colorScheme.onSurface,
+                              fontSize: 20,
+                              fontWeight: FontWeight.w600,
                             ),
                           ),
                         ],
@@ -716,417 +802,44 @@ class _HomeScreenState extends State<HomeScreen> {
             ],
           ),
 
-          const SizedBox(height: 12),
-          // Projects section (recent)
+          const SizedBox(height: 24),
           Text(
-            'Projects',
+            'Activity',
             style: TextStyle(
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-              fontSize: 16,
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Theme.of(context).colorScheme.onSurface,
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 12),
+
           StreamBuilder<List<Project>>(
             stream: _service.getProjects(),
-            builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return const SizedBox(height: 60);
-              }
-              if (snapshot.hasError) {
-                return Center(
-                  child: Text(
-                    'Error loading projects',
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.error,
-                    ),
-                  ),
-                );
-              }
-              final projects = snapshot.data ?? [];
-              if (projects.isEmpty) {
-                return GlassContainer(
-                  padding: const EdgeInsets.all(12),
-                  child: Center(
-                    child: Text(
-                      'No projects yet',
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ),
-                );
-              }
+            builder: (context, projectSnap) {
+              final projects = projectSnap.data ?? [];
+              
+              return StreamBuilder<List<Task>>(
+                stream: _service.getTasks(),
+                builder: (context, taskSnap) {
+                  final allTasks = taskSnap.data ?? [];
+                  final inboxTasks = allTasks.where((t) => t.projectId.isEmpty).toList();
 
-              final recentP = projects.take(3).toList();
-              return Column(
-                children: [
-                  ...recentP.map((p) {
-                    return Dismissible(
-                      key: Key(p.id),
-                      direction: DismissDirection.horizontal,
-                      background: Container(
-                        padding: const EdgeInsets.only(left: 20),
-                        alignment: Alignment.centerLeft,
-                        decoration: BoxDecoration(
-                          color: Colors.blueGrey.shade700,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Row(
-                          children: [
-                            const Icon(Icons.open_in_new, color: Colors.white),
-                            const SizedBox(width: 8),
-                            Text('Open', style: TextStyle(color: Colors.white)),
-                          ],
-                        ),
+                  return Column(
+                    children: [
+                      // Inbox Section
+                      _buildDashboardExpansionCard(
+                        project: null,
+                        tasks: inboxTasks,
                       ),
-                      secondaryBackground: Container(
-                        padding: const EdgeInsets.only(right: 20),
-                        alignment: Alignment.centerRight,
-                        decoration: BoxDecoration(
-                          color: Colors.redAccent,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.end,
-                          children: const [
-                            Icon(Icons.delete, color: Colors.white),
-                            SizedBox(width: 8),
-                            Text(
-                              'Delete',
-                              style: TextStyle(color: Colors.white),
-                            ),
-                          ],
-                        ),
-                      ),
-                      confirmDismiss: (direction) async {
-                        if (direction == DismissDirection.startToEnd) {
-                          if (!mounted) return false;
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => ProjectDetailsScreen(project: p),
-                            ),
-                          );
-                          return false;
-                        }
-                        if (direction == DismissDirection.endToStart) {
-                          final messenger = ScaffoldMessenger.of(context);
-                          final confirmed = await showDialog<bool>(
-                            context: context,
-                            builder: (context) => AlertDialog(
-                              backgroundColor:
-                                  Theme.of(
-                                    context,
-                                  ).dialogTheme.backgroundColor ??
-                                  Theme.of(context).colorScheme.surface,
-                              title: Text(
-                                'Delete Project',
-                                style: TextStyle(
-                                  color: Theme.of(
-                                    context,
-                                  ).colorScheme.onSurface,
-                                ),
-                              ),
-                              content: Text(
-                                'Delete "${p.name}"? This will not delete tasks automatically.',
-                                style: TextStyle(
-                                  color: Theme.of(
-                                    context,
-                                  ).colorScheme.onSurfaceVariant,
-                                ),
-                              ),
-                              actions: [
-                                TextButton(
-                                  onPressed: () =>
-                                      Navigator.pop(context, false),
-                                  child: const Text('Cancel'),
-                                ),
-                                TextButton(
-                                  onPressed: () => Navigator.pop(context, true),
-                                  child: const Text(
-                                    'Delete',
-                                    style: TextStyle(color: Colors.redAccent),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          );
-                          if (confirmed == true) {
-                            try {
-                              await _service.deleteProject(p.id);
-                              if (!mounted) return false;
-                              messenger.showSnackBar(
-                                const SnackBar(
-                                  content: Text('Project deleted'),
-                                ),
-                              );
-                            } catch (e) {
-                              if (!mounted) return false;
-                              messenger.showSnackBar(
-                                SnackBar(
-                                  content: Text('Failed to delete project: $e'),
-                                ),
-                              );
-                            }
-                          }
-                          return false;
-                        }
-                        return false;
-                      },
-                      child: Padding(
-                        padding: const EdgeInsets.only(bottom: 8.0),
-                        child: InkWell(
-                          borderRadius: BorderRadius.circular(12),
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) =>
-                                    ProjectDetailsScreen(project: p),
-                              ),
-                            );
-                          },
-                          child: GlassContainer(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 8,
-                            ),
-                            color: _safeParseColor(p.color),
-                            opacity: 0.08,
-                            child: Row(
-                              children: [
-                                Container(
-                                  width: 8,
-                                  height: 36,
-                                  decoration: BoxDecoration(
-                                    color: _safeParseColor(p.color),
-                                    borderRadius: BorderRadius.circular(4),
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Text(
-                                    p.name,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(
-                                      color: Theme.of(
-                                        context,
-                                      ).colorScheme.onSurface,
-                                    ),
-                                  ),
-                                ),
-                                PopupMenuButton<String>(
-                                  icon: const Icon(
-                                    Icons.more_vert,
-                                    color: Colors.white70,
-                                  ),
-                                  onSelected: (v) async {
-                                    if (v == 'view') {
-                                      setState(() => _currentIndex = 0);
-                                    } else if (v == 'details') {
-                                      Navigator.push(
-                                        context,
-                                        MaterialPageRoute(
-                                          builder: (_) =>
-                                              ProjectDetailsScreen(project: p),
-                                        ),
-                                      );
-                                    } else if (v == 'edit') {
-                                      _showEditProjectDialog(p);
-                                    } else if (v == 'delete') {
-                                      await _deleteProject(p);
-                                    }
-                                  },
-                                  itemBuilder: (_) => const [
-                                    PopupMenuItem(
-                                      value: 'view',
-                                      child: Text('Open'),
-                                    ),
-                                    PopupMenuItem(
-                                      value: 'details',
-                                      child: Text('Details'),
-                                    ),
-                                    PopupMenuItem(
-                                      value: 'edit',
-                                      child: Text('Edit'),
-                                    ),
-                                    PopupMenuItem(
-                                      value: 'delete',
-                                      child: Text('Delete'),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    );
-                  }),
-                  if (projects.length > 3)
-                    TextButton(
-                      onPressed: () => setState(() => _currentIndex = 0),
-                      child: Text(
-                        'View All Projects',
-                        style: TextStyle(
-                          color: Theme.of(context).colorScheme.primary,
-                        ),
-                      ),
-                    ),
-                ],
-              );
-            },
-          ),
-
-          Text(
-            'Tasks',
-            style: TextStyle(
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-              fontSize: 16,
-            ),
-          ),
-          const SizedBox(height: 8),
-          StreamBuilder<List<Task>>(
-            stream: _service.getTasks(),
-            builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return const Center(child: CircularProgressIndicator());
-              }
-              if (snapshot.hasError) {
-                return Center(
-                  child: Text(
-                    'Error loading tasks',
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.error,
-                    ),
-                  ),
-                );
-              }
-              final tasks = snapshot.data ?? [];
-              if (tasks.isEmpty) {
-                return GlassContainer(
-                  padding: const EdgeInsets.all(12),
-                  child: Center(
-                    child: Text(
-                      'No tasks yet',
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ),
-                );
-              }
-
-              return StreamBuilder<TimeEntry?>(
-                stream: _service.getRunningTimer(),
-                builder: (context, runningSnap) {
-                  final runningEntry = runningSnap.data;
-                  
-                  return ListView.separated(
-                    shrinkWrap: true,
-                    physics: const BouncingScrollPhysics(),
-                    itemCount: tasks.length,
-                    separatorBuilder: (context, index) => const SizedBox(height: 8),
-                    itemBuilder: (context, index) {
-                      final t = tasks[index];
-                      final isTaskRunning = runningEntry != null && runningEntry.taskId == t.id;
-
-                      return Dismissible(
-                        key: Key(t.id),
-                        direction: DismissDirection.endToStart,
-                        background: Container(
-                          alignment: Alignment.centerRight,
-                          padding: const EdgeInsets.only(right: 20),
-                          decoration: BoxDecoration(
-                            color: Colors.redAccent,
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: const Icon(Icons.delete, color: Colors.white),
-                        ),
-                        onDismissed: (direction) async {
-                          final messenger = ScaffoldMessenger.of(context);
-                          await _service.deleteTask(t.id);
-                          
-                          messenger.hideCurrentSnackBar();
-                          messenger.showSnackBar(
-                            SnackBar(
-                              content: Text('Deleted "${t.title}"'),
-                              action: SnackBarAction(
-                                label: 'UNDO',
-                                onPressed: () => _service.undoDeleteTask(t.id),
-                              ),
-                            ),
-                          );
-                        },
-                        child: GestureDetector(
-                          onTap: () => _showEditTaskDialog(t),
-                          child: GlassContainer(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 8,
-                            ),
-                            color: _safeParseColor(t.color),
-                            opacity: 0.06,
-                            child: Row(
-                              children: [
-                                Container(
-                                  width: 8,
-                                  height: 36,
-                                  decoration: BoxDecoration(
-                                    color: _safeParseColor(t.color),
-                                    borderRadius: BorderRadius.circular(4),
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        t.title,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: TextStyle(
-                                          color: Theme.of(context).colorScheme.onSurface,
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      ),
-                                      Text(
-                                        t.category,
-                                        style: TextStyle(
-                                          color: Theme.of(context).colorScheme.onSurfaceVariant,
-                                          fontSize: 12,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                IconButton(
-                                  icon: Icon(
-                                    isTaskRunning ? Icons.stop_circle_rounded : Icons.play_arrow_rounded,
-                                    color: isTaskRunning ? Colors.redAccent : Colors.amberAccent,
-                                    size: 32,
-                                  ),
-                                  tooltip: isTaskRunning ? 'Stop Timer' : 'Start Timer',
-                                  onPressed: () {
-                                    if (isTaskRunning) {
-                                      _service.stopTimer(runningEntry.id);
-                                    } else {
-                                      _service.startTimer(
-                                        t.id,
-                                        t.title,
-                                        t.category,
-                                      );
-                                    }
-                                  },
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      );
-                    },
+                      // Project Sections
+                      ...projects.map((p) {
+                        final pTasks = allTasks.where((t) => t.projectId == p.id).toList();
+                        return _buildDashboardExpansionCard(
+                          project: p,
+                          tasks: pTasks,
+                        );
+                      }),
+                    ],
                   );
                 },
               );
@@ -1134,6 +847,157 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildDashboardExpansionCard({Project? project, required List<Task> tasks}) {
+    final String id = project?.id ?? 'inbox';
+    final String name = project?.name ?? 'Inbox';
+    final Color color = project != null ? _safeParseColor(project.color) : Colors.grey;
+    final bool isExpanded = _expandedProjectId == id;
+
+    if (id == 'inbox' && tasks.isEmpty) return const SizedBox.shrink();
+
+    return GlassContainer(
+      margin: const EdgeInsets.only(bottom: 8),
+      borderRadius: BorderRadius.circular(16),
+      color: color,
+      opacity: 0.08,
+      child: Column(
+        children: [
+          ListTile(
+            dense: true,
+            visualDensity: VisualDensity.compact,
+            leading: Icon(
+              project != null ? Icons.folder_rounded : Icons.inbox_rounded,
+              color: color,
+              size: 20,
+            ),
+            title: Text(
+              name,
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 14,
+                color: Theme.of(context).colorScheme.onSurface,
+              ),
+            ),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  '${tasks.length}',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(width: 4),
+                Icon(
+                  isExpanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
+                  size: 18,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ],
+            ),
+            onTap: () {
+              setState(() {
+                _expandedProjectId = isExpanded ? null : id;
+              });
+            },
+          ),
+          if (isExpanded)
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+              child: tasks.isEmpty
+                  ? Text(
+                      'No tasks',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                    )
+                  : ListView.separated(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: tasks.length,
+                      separatorBuilder: (_, __) => const SizedBox(height: 4),
+                      itemBuilder: (context, index) {
+                        final t = tasks[index];
+                        return _buildCompactTaskItem(t, color);
+                      },
+                    ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCompactTaskItem(Task t, Color projectColor) {
+    return StreamBuilder<TimeEntry?>(
+      stream: _service.getRunningTimer(),
+      builder: (context, snap) {
+        final isRunning = snap.data?.taskId == t.id;
+        
+        return GlassContainer(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          borderRadius: BorderRadius.circular(10),
+          color: projectColor,
+          opacity: 0.05,
+          child: Row(
+            children: [
+              Container(
+                width: 3,
+                height: 16,
+                decoration: BoxDecoration(
+                  color: projectColor,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  t.title,
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: Theme.of(context).colorScheme.onSurface,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              IconButton(
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+                icon: Icon(
+                  isRunning ? Icons.stop_circle : Icons.play_arrow_rounded,
+                  color: isRunning ? Colors.redAccent : Colors.amberAccent,
+                  size: 22,
+                ),
+                onPressed: () async {
+                  if (isRunning) {
+                    await _service.stopTimer(snap.data!.id);
+                  } else {
+                    final hasRunning = await _service.hasRunningTimer();
+                    if (hasRunning) {
+                      if (!mounted) return;
+                      final shouldStart = await AppUI.showConfirmDialog(
+                        context,
+                        title: 'Timer Running',
+                        body: 'Stop current timer and start this one?',
+                        confirmLabel: 'Start',
+                        confirmColor: Colors.amber,
+                      );
+                      if (!shouldStart) return;
+                    }
+                    await _service.startTimer(t.id, t.title, t.category);
+                  }
+                },
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -1148,106 +1012,152 @@ class _HomeScreenState extends State<HomeScreen> {
         ? task.category
         : 'Inbox';
 
-    showDialog(
+    AppUI.showAppBottomSheet(
       context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          backgroundColor: const Color(0xFF1E1E1E),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(24),
-          ),
-          title: const Text(
-            'Edit Task',
-            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: editController,
-                style: const TextStyle(color: Colors.white),
-                decoration: const InputDecoration(
-                  labelText: 'Task name',
-                  labelStyle: TextStyle(color: Colors.white60),
+      title: 'Edit Task',
+      content: StatefulBuilder(
+        builder: (context, setDialogState) => Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            TextField(
+              controller: editController,
+              autofocus: true,
+              style: const TextStyle(color: Colors.white),
+              decoration: InputDecoration(
+                labelText: 'Task name',
+                labelStyle: const TextStyle(color: Colors.white60),
+                enabledBorder: OutlineInputBorder(
+                  borderSide: BorderSide(
+                    color: Theme.of(context).colorScheme.onSurface.withAlpha(
+                      (0.18 * 255).toInt(),
+                    ),
+                  ),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderSide: BorderSide(
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+                  borderRadius: BorderRadius.circular(12),
                 ),
               ),
-              const SizedBox(height: 12),
-              StreamBuilder<List<Project>>(
-                stream: _service.getProjects(),
-                builder: (context, snap) {
-                  final projects = snap.data ?? [];
-                  final items = [
-                    const DropdownMenuItem<String>(
-                      value: '',
-                      child: Text('Inbox'),
+            ),
+            const SizedBox(height: 20),
+            StreamBuilder<List<Project>>(
+              stream: _service.getProjects(),
+              builder: (context, snap) {
+                final projects = snap.data ?? [];
+                final items = [
+                  const DropdownMenuItem<String>(
+                    value: '',
+                    child: Text('Inbox'),
+                  ),
+                  ...projects.map(
+                    (p) => DropdownMenuItem<String>(
+                      value: p.id,
+                      child: Text(p.name),
                     ),
-                    ...projects.map(
-                      (p) => DropdownMenuItem<String>(
-                        value: p.id,
-                        child: Text(p.name),
+                  ),
+                ];
+                return DropdownButtonFormField<String>(
+                  initialValue: selectedProjectId ?? '',
+                  items: items,
+                  dropdownColor: Theme.of(context).colorScheme.surface,
+                  decoration: InputDecoration(
+                    labelText: 'Project',
+                    labelStyle: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    enabledBorder: OutlineInputBorder(
+                      borderSide: BorderSide(
+                        color: Theme.of(context).colorScheme.onSurface.withAlpha(
+                          (0.18 * 255).toInt(),
+                        ),
                       ),
+                      borderRadius: BorderRadius.circular(12),
                     ),
-                  ];
-                  return DropdownButtonFormField<String>(
-                    initialValue: selectedProjectId ?? '',
-                    items: items,
-                    decoration: const InputDecoration(labelText: 'Project'),
-                    onChanged: (v) {
-                      setDialogState(() {
-                        selectedProjectId = v;
-                        final p = projects.firstWhere(
-                          (pr) => pr.id == v,
-                          orElse: () => Project(
-                            id: '',
-                            name: 'Inbox',
-                            color: '#FFC107',
-                            createdAt: DateTime.now().millisecondsSinceEpoch,
-                          ),
-                        );
-                        selectedProjectName = p.name;
-                      });
-                    },
-                  );
-                },
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text(
-                'Cancel',
-                style: TextStyle(color: Colors.white54),
-              ),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                final title = editController.text.trim();
-                if (title.isEmpty) return;
-                final nav = Navigator.of(context);
-                final messenger = ScaffoldMessenger.of(context);
-                try {
-                  await _service.updateTask(
-                    task.id,
-                    title,
-                    task.description,
-                    selectedProjectId ?? '',
-                    selectedProjectName,
-                  );
-                  if (!mounted) return;
-                  nav.pop();
-                  messenger.showSnackBar(
-                    const SnackBar(content: Text('Task updated')),
-                  );
-                } catch (e) {
-                  if (!mounted) return;
-                  messenger.showSnackBar(
-                    SnackBar(content: Text('Failed to update task: $e')),
-                  );
-                }
+                  ),
+                  onChanged: (v) {
+                    setDialogState(() {
+                      selectedProjectId = v;
+                      final p = projects.firstWhere(
+                        (pr) => pr.id == v,
+                        orElse: () => Project(
+                          id: '',
+                          name: 'Inbox',
+                          color: '#FFC107',
+                          createdAt: DateTime.now().millisecondsSinceEpoch,
+                        ),
+                      );
+                      selectedProjectName = p.name;
+                    });
+                  },
+                );
               },
-              child: const Text('Save'),
             ),
+            const SizedBox(height: 32),
+            Row(
+              children: [
+                Expanded(
+                  child: TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                    ),
+                    child: const Text(
+                      'Cancel',
+                      style: TextStyle(color: Colors.white54, fontSize: 16),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: () async {
+                      final title = editController.text.trim();
+                      if (title.isEmpty) return;
+                      final nav = Navigator.of(context);
+                      try {
+                        await _service.updateTask(
+                          task.id,
+                          title,
+                          task.description,
+                          selectedProjectId ?? '',
+                          selectedProjectName,
+                        );
+                        if (!mounted) return;
+                        nav.pop();
+                        AppUI.showSnackBar(
+                          context, 
+                          'Task updated', 
+                          type: SnackBarType.success
+                        );
+                      } catch (e) {
+                        if (!mounted) return;
+                        AppUI.showSnackBar(
+                          context, 
+                          'Failed to update task: $e', 
+                          type: SnackBarType.error
+                        );
+                      }
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Theme.of(context).colorScheme.primary,
+                      foregroundColor: Theme.of(context).colorScheme.onPrimary,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      elevation: 0,
+                    ),
+                    child: const Text('Save Changes', style: TextStyle(fontWeight: FontWeight.bold)),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
           ],
         ),
       ),

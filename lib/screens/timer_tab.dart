@@ -4,6 +4,7 @@ import '../services/time_tracker_service.dart';
 import '../models/task.dart';
 import '../models/time_entry.dart';
 import '../widgets/glass_container.dart';
+import '../utils/ui_helpers.dart';
 
 class TimerTab extends StatefulWidget {
   const TimerTab({super.key});
@@ -110,9 +111,11 @@ class _TimerTabState extends State<TimerTab>
     } else {
       if (_selectedTask == null) {
         if (!mounted) return;
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Select a task first')));
+        AppUI.showSnackBar(
+          context, 
+          'Select a task first', 
+          type: SnackBarType.warning
+        );
         return;
       }
       await _service.startTimer(
@@ -132,8 +135,10 @@ class _TimerTabState extends State<TimerTab>
     } else {
       if (_focusTask == null) {
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Select a task for focus session')),
+        AppUI.showSnackBar(
+          context, 
+          'Select a task for focus session', 
+          type: SnackBarType.warning
         );
         return;
       }
@@ -154,13 +159,17 @@ class _TimerTabState extends State<TimerTab>
       try {
         await _service.stopTimer(_runningEntry!.id);
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Focus Session Complete & Logged!')),
+        AppUI.showSnackBar(
+          context, 
+          'Focus Session Complete & Logged!', 
+          type: SnackBarType.success
         );
       } catch (e) {
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to stop focus session: $e')),
+        AppUI.showSnackBar(
+          context, 
+          'Failed to stop focus session: $e', 
+          type: SnackBarType.error
         );
       }
     }
@@ -197,58 +206,82 @@ class _TimerTabState extends State<TimerTab>
           ],
         ),
       ),
-      body: TabBarView(
-        controller: _tabController,
-        children: [
-          _buildTimerView(
-            isStopwatch: true,
-            seconds:
-                (_runningEntry != null &&
-                    _runningEntry!.expectedDuration == null)
-                ? _displaySeconds
-                : _displaySeconds,
-            isRunning:
-                (_runningEntry != null &&
-                _runningEntry!.expectedDuration == null),
-            onToggle: _toggleStopwatch,
-            task: _selectedTask,
-            onTaskChanged: (t) => setState(() => _selectedTask = t),
-          ),
-          _buildTimerView(
-            isStopwatch: false,
-            seconds:
-                (_runningEntry != null &&
-                    _runningEntry!.expectedDuration != null)
-                ? _displaySeconds
-                : (_selectedFocusDurationMinutes * 60),
-            isRunning:
-                (_runningEntry != null &&
-                _runningEntry!.expectedDuration != null),
-            onToggle: _toggleFocus,
-            task: _focusTask,
-            onTaskChanged: (t) => setState(() => _focusTask = t),
-          ),
-        ],
+      body: StreamBuilder<List<Task>>(
+        stream: _service.getTasks(),
+        builder: (context, snapshot) {
+          final tasks = snapshot.data ?? [];
+          return TabBarView(
+            physics: const NeverScrollableScrollPhysics(),
+            controller: _tabController,
+            children: [
+              _buildTimerView(
+                isStopwatch: true,
+                tasks: tasks,
+                seconds:
+                    (_runningEntry != null &&
+                            _runningEntry!.expectedDuration == null)
+                        ? _displaySeconds
+                        : _displaySeconds,
+                isRunning:
+                    (_runningEntry != null &&
+                        _runningEntry!.expectedDuration == null),
+                onToggle: _toggleStopwatch,
+                task: _selectedTask,
+                onTaskChanged: (t) => setState(() => _selectedTask = t),
+              ),
+              _buildTimerView(
+                isStopwatch: false,
+                tasks: tasks,
+                seconds:
+                    (_runningEntry != null &&
+                            _runningEntry!.expectedDuration != null)
+                        ? _displaySeconds
+                        : (_selectedFocusDurationMinutes * 60),
+                isRunning:
+                    (_runningEntry != null &&
+                        _runningEntry!.expectedDuration != null),
+                onToggle: _toggleFocus,
+                task: _focusTask,
+                onTaskChanged: (t) => setState(() => _focusTask = t),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
 
   Widget _buildTimerView({
     required bool isStopwatch,
+    required List<Task> tasks,
     required int seconds,
     required bool isRunning,
     required VoidCallback onToggle,
     required Task? task,
     required Function(Task?) onTaskChanged,
   }) {
-    final accentColor = _getAccentColor(task);
+    // Determine effective task to display
+    Task? effectiveTask = task;
+    if (isRunning && _runningEntry != null) {
+      // Try to find the running task in the list
+      try {
+        effectiveTask = tasks.firstWhere(
+          (t) => t.id == _runningEntry!.taskId,
+          orElse: () => effectiveTask ?? tasks.first, // Fallback if not found
+        );
+      } catch (_) {
+        // Fallback
+      }
+    }
+
+    final accentColor = _getAccentColor(effectiveTask);
 
     return SingleChildScrollView(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(12, 12, 12, 100),
         child: Column(
           children: [
-            _buildTaskSelector(onTaskChanged, task),
+            _buildTaskSelector(onTaskChanged, effectiveTask, tasks),
             const SizedBox(height: 12),
             if (!isStopwatch) ...[
               const SizedBox(height: 8),
@@ -268,27 +301,29 @@ class _TimerTabState extends State<TimerTab>
                     const SizedBox(width: 8),
                     DropdownButton<int>(
                       value: _selectedFocusDurationMinutes,
-                      items: _focusDurationOptions
-                          .map(
-                            (d) => DropdownMenuItem<int>(
-                              value: d,
-                              child: Text('$d min'),
-                            ),
-                          )
-                          .toList(),
-                      onChanged: isRunning
-                          ? null
-                          : (v) => setState(() {
-                              if (v != null) _selectedFocusDurationMinutes = v;
-                            }),
+                      items:
+                          _focusDurationOptions
+                              .map(
+                                (d) => DropdownMenuItem<int>(
+                                  value: d,
+                                  child: Text('$d min'),
+                                ),
+                              )
+                              .toList(),
+                      onChanged:
+                          isRunning
+                              ? null
+                              : (v) => setState(() {
+                                if (v != null) _selectedFocusDurationMinutes = v;
+                              }),
                     ),
                   ],
                 ),
               ),
               const SizedBox(height: 8),
               SizedBox(
-                width: 240, // Slightly smaller ring
-                height: 240,
+                width: 180, // Compact ring
+                height: 180,
                 child: Stack(
                   alignment: Alignment.center,
                   children: [
@@ -303,22 +338,23 @@ class _TimerTabState extends State<TimerTab>
                                         ? _runningEntry!.expectedDuration!
                                         : (_selectedFocusDurationMinutes * 60))
                                     .toDouble())),
-                        strokeWidth: 12,
+                        strokeWidth: 8, // Thinner stroke
                         valueColor: AlwaysStoppedAnimation<Color>(accentColor),
-                        backgroundColor: Theme.of(context)
-                            .colorScheme
-                            .surfaceContainerHighest
-                            .withValues(alpha: 0.2),
+                        backgroundColor:
+                            Theme.of(context)
+                                .colorScheme
+                                .surfaceContainerHighest
+                                .withValues(alpha: 0.2),
                         strokeCap: StrokeCap.round,
                       ),
                     ),
                     Text(
                       _formatTime(seconds),
                       style: TextStyle(
-                        fontSize: 64, // Slightly smaller text
-                        fontWeight: FontWeight.w200,
+                        fontSize: 42, // Compact font
+                        fontWeight: FontWeight.w300,
                         color: Theme.of(context).colorScheme.onSurface,
-                        letterSpacing: -2,
+                        letterSpacing: -1,
                       ),
                     ),
                   ],
@@ -328,10 +364,10 @@ class _TimerTabState extends State<TimerTab>
               Text(
                 _formatTime(seconds),
                 style: TextStyle(
-                  fontSize: 84, // Slightly smaller text
+                  fontSize: 64, // Compact font
                   fontWeight: FontWeight.w200,
                   color: Theme.of(context).colorScheme.onSurface,
-                  letterSpacing: -4,
+                  letterSpacing: -3,
                 ),
               ),
             ],
@@ -347,24 +383,24 @@ class _TimerTabState extends State<TimerTab>
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        width: 72, // Slightly smaller button
-        height: 72,
+        width: 64, // Compact button
+        height: 64,
         decoration: BoxDecoration(
           color: isRunning ? Colors.redAccent : color,
           shape: BoxShape.circle,
           boxShadow: [
             BoxShadow(
               color: isRunning
-                  ? Colors.redAccent.withValues(alpha: 0.4)
-                  : color.withValues(alpha: 0.4),
-              blurRadius: 20,
-              spreadRadius: 2,
+                  ? Colors.redAccent.withValues(alpha: 0.3)
+                  : color.withValues(alpha: 0.3),
+              blurRadius: 16,
+              spreadRadius: 1,
             ),
           ],
         ),
         child: Icon(
           isRunning ? Icons.stop_rounded : Icons.play_arrow_rounded,
-          size: 40,
+          size: 32,
           color: isRunning
               ? Theme.of(context).colorScheme.onPrimary
               : Theme.of(context).colorScheme.onSurface,
@@ -373,49 +409,49 @@ class _TimerTabState extends State<TimerTab>
     );
   }
 
-  Widget _buildTaskSelector(Function(Task?) onChanged, Task? currentValue) {
-    return StreamBuilder<List<Task>>(
-      stream: _service.getTasks(),
-      builder: (context, snapshot) {
-        if (!snapshot.hasData) return const SizedBox(height: 56);
-        final tasks = snapshot.data!;
-        // Deduplicate tasks by id to avoid multiple DropdownMenuItems with same value
-        final Map<String, Task> uniqueById = {};
-        for (var t in tasks) {
-          uniqueById[t.id] = t;
-        }
-        final uniqueTasks = uniqueById.values.toList();
+  Widget _buildTaskSelector(
+    Function(Task?) onChanged,
+    Task? currentValue,
+    List<Task> tasks,
+  ) {
+    // Deduplicate tasks by id to avoid multiple DropdownMenuItems with same value
+    final Map<String, Task> uniqueById = {};
+    for (var t in tasks) {
+      uniqueById[t.id] = t;
+    }
+    final uniqueTasks = uniqueById.values.toList();
 
-        // Ensure the currently selected value references one of the items
-        Task? selectedValue;
-        if (currentValue != null) {
-          final matches = uniqueTasks.where((t) => t.id == currentValue.id);
-          selectedValue = matches.isNotEmpty ? matches.first : null;
-        }
+    // Ensure the currently selected value references one of the items
+    Task? selectedValue;
+    if (currentValue != null) {
+      final matches = uniqueTasks.where((t) => t.id == currentValue.id);
+      selectedValue = matches.isNotEmpty ? matches.first : null;
+    }
 
-        return GlassContainer(
-          borderRadius: BorderRadius.circular(20),
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
-          child: DropdownButtonHideUnderline(
-            child: DropdownButton<Task>(
-              value: selectedValue,
-              hint: Text(
-                'Select a Task',
-                style: TextStyle(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
-              ),
-              dropdownColor: Theme.of(context).colorScheme.surface,
-              icon: Icon(
-                Icons.keyboard_arrow_down,
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
-              isExpanded: true,
-              style: TextStyle(
-                color: Theme.of(context).colorScheme.onSurface,
-                fontSize: 16,
-              ),
-              items: uniqueTasks
+    return GlassContainer(
+      borderRadius: BorderRadius.circular(20),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<Task>(
+          value: selectedValue,
+          hint: Text(
+            'Select a Task',
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
+          dropdownColor: Theme.of(context).colorScheme.surface,
+          icon: Icon(
+            Icons.keyboard_arrow_down,
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
+          isExpanded: true,
+          style: TextStyle(
+            color: Theme.of(context).colorScheme.onSurface,
+            fontSize: 16,
+          ),
+          items:
+              uniqueTasks
                   .map(
                     (t) => DropdownMenuItem(
                       value: t,
@@ -442,11 +478,9 @@ class _TimerTabState extends State<TimerTab>
                     ),
                   )
                   .toList(),
-              onChanged: _isRunning ? null : onChanged,
-            ),
-          ),
-        );
-      },
+          onChanged: _isRunning ? null : onChanged,
+        ),
+      ),
     );
   }
 }

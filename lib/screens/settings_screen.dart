@@ -5,7 +5,7 @@ import '../theme_controller.dart';
 import '../widgets/glass_container.dart';
 import '../login_page.dart';
 import '../services/time_tracker_service.dart';
-import '../models/category.dart';
+import '../utils/ui_helpers.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -40,9 +40,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
   void _showProfileDialog() {
     final user = AuthService().currentUser;
     if (user == null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('No user signed in')));
+      AppUI.showSnackBar(
+        context, 
+        'No user signed in', 
+        type: SnackBarType.warning
+      );
       return;
     }
 
@@ -50,319 +52,96 @@ class _SettingsScreenState extends State<SettingsScreen> {
       text: user.displayName ?? '',
     );
 
-    showDialog(
+    AppUI.showAppBottomSheet(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor:
-            Theme.of(context).dialogTheme.backgroundColor ??
-            Theme.of(context).colorScheme.surface,
-        title: Text(
-          'Edit Profile',
-          style: TextStyle(color: Theme.of(context).colorScheme.onSurface),
-        ),
-        content: TextField(
-          controller: nameController,
-          style: TextStyle(color: Theme.of(context).colorScheme.onSurface),
-          decoration: const InputDecoration(labelText: 'Display Name'),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              final newName = nameController.text.trim();
-              final nav = Navigator.of(context);
-              final messenger = ScaffoldMessenger.of(context);
-              try {
-                await user.updateDisplayName(newName);
-                if (!mounted) return;
-                nav.pop();
-                messenger.showSnackBar(
-                  const SnackBar(content: Text('Profile updated')),
-                );
-                setState(() {});
-              } catch (e) {
-                if (!mounted) return;
-                messenger.showSnackBar(
-                  SnackBar(content: Text('Failed to update profile: $e')),
-                );
-              }
-            },
-            child: const Text('Save'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // Projects removed from Settings screen per compact UI design.
-
-  final List<String> _defaultColors = [
-    '#FFC107',
-    '#FF9800',
-    '#2196F3',
-    '#4CAF50',
-    '#9C27B0',
-    '#F44336',
-    '#607D8B',
-    '#795548',
-  ];
-
-  Color _safeParseColor(String colorStr, {Color? fallback}) {
-    try {
-      return Color(int.parse(colorStr.replaceFirst('#', '0xFF')));
-    } catch (_) {
-      return fallback ?? const Color(0xFF2196F3);
-    }
-  }
-
-  void _showAddCategoryDialog() {
-    final TextEditingController nameController = TextEditingController();
-    String selectedColor = _defaultColors.first;
-
-    showDialog(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          backgroundColor:
-              Theme.of(context).dialogTheme.backgroundColor ??
-              Theme.of(context).colorScheme.surface,
-          title: Text(
-            'New Category',
+      title: 'Edit Profile',
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          TextField(
+            controller: nameController,
             style: TextStyle(color: Theme.of(context).colorScheme.onSurface),
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: nameController,
-                decoration: InputDecoration(
-                  labelText: 'Category Name',
-                  labelStyle: TextStyle(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
-                ),
-                style: TextStyle(
-                  color: Theme.of(context).colorScheme.onSurface,
-                ),
-              ),
-              const SizedBox(height: 12),
-              Wrap(
-                spacing: 8,
-                children: _defaultColors.map((color) {
-                  final isSelected = selectedColor == color;
-                  return GestureDetector(
-                    onTap: () => setDialogState(() => selectedColor = color),
-                    child: Container(
-                      width: 36,
-                      height: 36,
-                      decoration: BoxDecoration(
-                        color: _safeParseColor(color),
-                        shape: BoxShape.circle,
-                        border: isSelected
-                            ? Border.all(
-                                color: Theme.of(context).colorScheme.onSurface,
-                                width: 2,
-                              )
-                            : null,
-                      ),
-                    ),
-                  );
-                }).toList(),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: Text(
-                'Cancel',
-                style: TextStyle(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
-              ),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                final name = nameController.text.trim();
-                if (name.isEmpty) return;
-                final messenger = ScaffoldMessenger.of(context);
-                final nav = Navigator.of(context);
-                try {
-                  await _trackerService.createProject(name, selectedColor);
-                  if (!mounted) return;
-                  nav.pop();
-                  messenger.showSnackBar(
-                    const SnackBar(content: Text('Category created')),
-                  );
-                } catch (e) {
-                  messenger.showSnackBar(
-                    SnackBar(content: Text('Failed to create category: $e')),
-                  );
-                }
-              },
-              child: const Text('Create'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _showEditCategoryDialog(Category cat) {
-    final TextEditingController nameController = TextEditingController(
-      text: cat.name,
-    );
-    String selectedColor = cat.color;
-
-    showDialog(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          backgroundColor:
-              Theme.of(context).dialogTheme.backgroundColor ??
-              Theme.of(context).colorScheme.surface,
-          title: Text(
-            'Edit Category',
-            style: TextStyle(color: Theme.of(context).colorScheme.onSurface),
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: nameController,
-                decoration: InputDecoration(
-                  labelText: 'Category Name',
-                  labelStyle: TextStyle(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
-                ),
-                style: TextStyle(
-                  color: Theme.of(context).colorScheme.onSurface,
-                ),
-              ),
-              const SizedBox(height: 12),
-              Wrap(
-                spacing: 8,
-                children: _defaultColors.map((color) {
-                  final isSelected = selectedColor == color;
-                  return GestureDetector(
-                    onTap: () => setDialogState(() => selectedColor = color),
-                    child: Container(
-                      width: 36,
-                      height: 36,
-                      decoration: BoxDecoration(
-                        color: _safeParseColor(color),
-                        shape: BoxShape.circle,
-                        border: isSelected
-                            ? Border.all(
-                                color: Theme.of(context).colorScheme.onSurface,
-                                width: 2,
-                              )
-                            : null,
-                      ),
-                    ),
-                  );
-                }).toList(),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: Text(
-                'Cancel',
-                style: TextStyle(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
-              ),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                final name = nameController.text.trim();
-                if (name.isEmpty) return;
-                final messenger = ScaffoldMessenger.of(context);
-                final nav = Navigator.of(context);
-                try {
-                  await _trackerService.updateProject(
-                    cat.id,
-                    name,
-                    selectedColor,
-                  );
-                  if (!mounted) return;
-                  nav.pop();
-                  messenger.showSnackBar(
-                    const SnackBar(content: Text('Category updated')),
-                  );
-                } catch (e) {
-                  messenger.showSnackBar(
-                    SnackBar(content: Text('Failed to update category: $e')),
-                  );
-                }
-              },
-              child: const Text('Save'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _deleteCategory(Category cat) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor:
-            Theme.of(context).dialogTheme.backgroundColor ??
-            Theme.of(context).colorScheme.surface,
-        title: Text(
-          'Delete Category',
-          style: TextStyle(color: Theme.of(context).colorScheme.onSurface),
-        ),
-        content: Text(
-          'Delete "${cat.name}"? This will not delete tasks automatically.',
-          style: TextStyle(
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: Text(
-              'Cancel',
-              style: TextStyle(
+            decoration: InputDecoration(
+              labelText: 'Display Name',
+              labelStyle: TextStyle(
                 color: Theme.of(context).colorScheme.onSurfaceVariant,
               ),
+              enabledBorder: OutlineInputBorder(
+                borderSide: BorderSide(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderSide: BorderSide(
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+                borderRadius: BorderRadius.circular(12),
+              ),
             ),
           ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text(
-              'Delete',
-              style: TextStyle(color: Colors.redAccent),
-            ),
+          const SizedBox(height: 32),
+          Row(
+            children: [
+              Expanded(
+                child: TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                  ),
+                  child: Text(
+                    'Cancel',
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      fontSize: 16,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: ElevatedButton(
+                  onPressed: () async {
+                    final newName = nameController.text.trim();
+                    final nav = Navigator.of(context);
+                    try {
+                      await user.updateDisplayName(newName);
+                      if (!mounted) return;
+                      nav.pop();
+                      AppUI.showSnackBar(
+                        context, 
+                        'Profile updated', 
+                        type: SnackBarType.success
+                      );
+                      setState(() {});
+                    } catch (e) {
+                      if (!mounted) return;
+                      AppUI.showSnackBar(
+                        context, 
+                        'Failed to update profile: $e', 
+                        type: SnackBarType.error
+                      );
+                    }
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Theme.of(context).colorScheme.primary,
+                    foregroundColor: Theme.of(context).colorScheme.onPrimary,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    elevation: 0,
+                  ),
+                  child: const Text('Save', style: TextStyle(fontWeight: FontWeight.bold)),
+                ),
+              ),
+            ],
           ),
+          const SizedBox(height: 16),
         ],
       ),
     );
-    if (confirmed == true) {
-      if (!mounted) return;
-      final messenger = ScaffoldMessenger.of(context);
-      try {
-        await _trackerService.deleteProject(cat.id);
-        if (!mounted) return;
-        messenger.showSnackBar(
-          const SnackBar(content: Text('Category deleted')),
-        );
-      } catch (e) {
-        if (!mounted) return;
-        messenger.showSnackBar(
-          SnackBar(content: Text('Failed to delete category: $e')),
-        );
-      }
-    }
   }
 
   @override
@@ -501,50 +280,82 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         onPressed: () {
                           _goalController.text = (currentGoal / 3600)
                               .toString();
-                          showDialog(
+                          AppUI.showAppBottomSheet(
                             context: context,
-                            builder: (context) => AlertDialog(
-                              title: const Text('Set Daily Goal (Hours)'),
-                              content: TextField(
-                                controller: _goalController,
-                                keyboardType: TextInputType.number,
-                                decoration: const InputDecoration(
-                                  suffixText: 'hrs',
+                            title: 'Set Daily Goal',
+                            content: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                TextField(
+                                  controller: _goalController,
+                                  keyboardType: TextInputType.number,
+                                  style: TextStyle(
+                                    color: Theme.of(context).colorScheme.onSurface,
+                                  ),
+                                  decoration: InputDecoration(
+                                    labelText: 'Hours per day',
+                                    suffixText: 'hrs',
+                                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                                  ),
                                 ),
-                              ),
-                              actions: [
-                                TextButton(
-                                  onPressed: () => Navigator.pop(context),
-                                  child: const Text('Cancel'),
-                                ),
-                                ElevatedButton(
-                                  onPressed: () async {
-                                    final hrs = double.tryParse(
-                                      _goalController.text,
-                                    );
-                                    if (hrs == null || hrs <= 0 || hrs > 24) {
-                                      ScaffoldMessenger.of(
-                                        context,
-                                      ).showSnackBar(
-                                        const SnackBar(
-                                          content: Text(
-                                            'Please enter a valid goal between 0.1 and 24 hours.',
+                                const SizedBox(height: 32),
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: TextButton(
+                                        onPressed: () => Navigator.pop(context),
+                                        style: TextButton.styleFrom(
+                                          padding: const EdgeInsets.symmetric(vertical: 16),
+                                        ),
+                                        child: Text(
+                                          'Cancel',
+                                          style: TextStyle(
+                                            color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                            fontSize: 16,
                                           ),
                                         ),
-                                      );
-                                      return;
-                                    }
-                                    final nav = Navigator.of(context);
-                                    await _trackerService.setDailyGoal(
-                                      (hrs * 3600).toInt(),
-                                    );
-                                    if (!mounted) {
-                                      return;
-                                    }
-                                    nav.pop();
-                                  },
-                                  child: const Text('Save'),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 16),
+                                    Expanded(
+                                      child: ElevatedButton(
+                                        onPressed: () async {
+                                          final hrs = double.tryParse(
+                                            _goalController.text,
+                                          );
+                                          if (hrs == null || hrs <= 0 || hrs > 24) {
+                                            AppUI.showSnackBar(
+                                              context, 
+                                              'Please enter a valid goal between 0.1 and 24 hours.',
+                                              type: SnackBarType.warning
+                                            );
+                                            return;
+                                          }
+                                          final nav = Navigator.of(context);
+                                          await _trackerService.setDailyGoal(
+                                            (hrs * 3600).toInt(),
+                                          );
+                                          if (!mounted) {
+                                            return;
+                                          }
+                                          nav.pop();
+                                        },
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: Theme.of(context).colorScheme.primary,
+                                          foregroundColor: Theme.of(context).colorScheme.onPrimary,
+                                          padding: const EdgeInsets.symmetric(vertical: 16),
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(12),
+                                          ),
+                                          elevation: 0,
+                                        ),
+                                        child: const Text('Save', style: TextStyle(fontWeight: FontWeight.bold)),
+                                      ),
+                                    ),
+                                  ],
                                 ),
+                                const SizedBox(height: 16),
                               ],
                             ),
                           );
@@ -599,107 +410,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
             const SizedBox(height: 12),
 
-            // Categories Section
-            Text(
-              'Categories',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(height: 8),
-            GlassContainer(
-              padding: const EdgeInsets.all(8),
-              child: Column(
-                children: [
-                  StreamBuilder<List<Category>>(
-                    stream: _trackerService.getCategories(),
-                    builder: (context, snap) {
-                      if (!snap.hasData) return const SizedBox(height: 60);
-                      final cats = snap.data ?? [];
-                      if (cats.isEmpty) {
-                        return Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              'No categories yet',
-                              style: TextStyle(
-                                color: Theme.of(
-                                  context,
-                                ).colorScheme.onSurfaceVariant,
-                              ),
-                            ),
-                            TextButton(
-                              onPressed: _showAddCategoryDialog,
-                              child: Text('Add'),
-                            ),
-                          ],
-                        );
-                      }
-
-                      return Column(
-                        children: [
-                          ...cats.map(
-                            (c) => ListTile(
-                              contentPadding: EdgeInsets.zero,
-                              leading: Container(
-                                width: 36,
-                                height: 36,
-                                decoration: BoxDecoration(
-                                  color: _safeParseColor(c.color),
-                                  shape: BoxShape.circle,
-                                ),
-                              ),
-                              title: Text(
-                                c.name,
-                                style: TextStyle(
-                                  color: Theme.of(
-                                    context,
-                                  ).colorScheme.onSurface,
-                                ),
-                              ),
-                              trailing: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  IconButton(
-                                    icon: Icon(
-                                      Icons.edit,
-                                      color: Theme.of(
-                                        context,
-                                      ).colorScheme.onSurfaceVariant,
-                                    ),
-                                    onPressed: () => _showEditCategoryDialog(c),
-                                  ),
-                                  IconButton(
-                                    icon: Icon(
-                                      Icons.delete,
-                                      color: Colors.redAccent,
-                                    ),
-                                    onPressed: () => _deleteCategory(c),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Align(
-                            alignment: Alignment.centerRight,
-                            child: TextButton(
-                              onPressed: _showAddCategoryDialog,
-                              child: Text('Add Category'),
-                            ),
-                          ),
-                        ],
-                      );
-                    },
-                  ),
-                ],
-              ),
-            ),
-
-            const SizedBox(height: 24),
-
             // Data Section
             Text(
               'Data',
@@ -727,20 +437,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                     ),
                     onTap: () async {
-                      final messenger = ScaffoldMessenger.of(context);
                       try {
                         final path = await _trackerService.exportToCSV();
                         await Share.shareXFiles([
                           XFile(path),
                         ], text: 'Time Tracker Export');
                         if (mounted) {
-                          messenger.showSnackBar(
-                            SnackBar(content: Text('Exported to $path')),
+                          AppUI.showSnackBar(
+                            context, 
+                            'Exported to $path', 
+                            type: SnackBarType.success
                           );
                         }
                       } catch (e) {
-                        messenger.showSnackBar(
-                          SnackBar(content: Text('Export failed: $e')),
+                        AppUI.showSnackBar(
+                          context, 
+                          'Export failed: $e', 
+                          type: SnackBarType.error
                         );
                       }
                     },
@@ -778,49 +491,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     onTap: () async {
                       final buildContext = context;
                       final nav = Navigator.of(buildContext);
-                      final confirmed = await showDialog<bool>(
-                        context: buildContext,
-                        builder: (context) => AlertDialog(
-                          backgroundColor:
-                              Theme.of(context).dialogTheme.backgroundColor ??
-                              Theme.of(context).colorScheme.surface,
-                          title: Text(
-                            'Confirm Logout',
-                            style: TextStyle(
-                              color: Theme.of(context).colorScheme.onSurface,
-                            ),
-                          ),
-                          content: Text(
-                            'Are you sure you want to logout?',
-                            style: TextStyle(
-                              color: Theme.of(
-                                context,
-                              ).colorScheme.onSurfaceVariant,
-                            ),
-                          ),
-                          actions: [
-                            TextButton(
-                              onPressed: () => nav.pop(false),
-                              child: Text(
-                                'Cancel',
-                                style: TextStyle(
-                                  color: Theme.of(
-                                    context,
-                                  ).colorScheme.onSurfaceVariant,
-                                ),
-                              ),
-                            ),
-                            TextButton(
-                              onPressed: () => nav.pop(true),
-                              child: const Text(
-                                'Logout',
-                                style: TextStyle(color: Colors.redAccent),
-                              ),
-                            ),
-                          ],
-                        ),
+                      final confirmed = await AppUI.showConfirmDialog(
+                        buildContext,
+                        title: 'Confirm Logout',
+                        body: 'Are you sure you want to logout?',
+                        confirmLabel: 'Logout',
+                        confirmColor: Colors.redAccent,
                       );
-                      if (confirmed == true) {
+                      
+                      if (confirmed) {
                         if (!mounted) return;
                         await AuthService().logout();
                         if (!mounted) {
