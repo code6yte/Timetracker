@@ -185,6 +185,13 @@ class TimeTrackerService {
     });
   }
 
+  // Undo delete task
+  Future<void> undoDeleteTask(String taskId) async {
+    await _firestore.collection('tasks').doc(taskId).update({
+      'isActive': true,
+    });
+  }
+
   // ========== TIME ENTRY OPERATIONS ==========
 
   // Start timer for a task
@@ -288,21 +295,20 @@ class TimeTrackerService {
       59,
     );
 
+    // Fetch all user entries and filter client-side to avoid composite index requirements
     return _firestore
         .collection('time_entries')
         .where('userId', isEqualTo: userId)
-        .where(
-          'startTime',
-          isGreaterThanOrEqualTo: startOfDay.millisecondsSinceEpoch,
-        )
-        .where(
-          'startTime',
-          isLessThanOrEqualTo: endOfDay.millisecondsSinceEpoch,
-        )
         .snapshots()
         .map((snapshot) {
           final entries = snapshot.docs
               .map((doc) => TimeEntry.fromMap(doc.id, doc.data()))
+              .where((entry) {
+                return entry.startTime.millisecondsSinceEpoch >=
+                        startOfDay.millisecondsSinceEpoch &&
+                    entry.startTime.millisecondsSinceEpoch <=
+                        endOfDay.millisecondsSinceEpoch;
+              })
               .toList();
           // Sort by start time
           entries.sort((a, b) => b.startTime.compareTo(a.startTime));
@@ -334,23 +340,21 @@ class TimeTrackerService {
     final entries = await _firestore
         .collection('time_entries')
         .where('userId', isEqualTo: userId)
-        .where(
-          'startTime',
-          isGreaterThanOrEqualTo: startOfDay.millisecondsSinceEpoch,
-        )
-        .where(
-          'startTime',
-          isLessThanOrEqualTo: endOfDay.millisecondsSinceEpoch,
-        )
         .get();
 
     final Map<String, int> categoryTime = {};
 
     for (var doc in entries.docs) {
       final data = doc.data();
-      final category = data['category'] ?? 'Uncategorized';
-      final duration = (data['duration'] ?? 0) as int;
-      categoryTime[category] = (categoryTime[category] ?? 0) + duration;
+      final startTimeMs = data['startTime'] as int? ?? 0;
+      
+      if (startTimeMs >= startOfDay.millisecondsSinceEpoch && 
+          startTimeMs <= endOfDay.millisecondsSinceEpoch) {
+          
+        final category = data['category'] ?? 'Uncategorized';
+        final duration = (data['duration'] ?? 0) as int;
+        categoryTime[category] = (categoryTime[category] ?? 0) + duration;
+      }
     }
 
     return categoryTime;
@@ -371,23 +375,20 @@ class TimeTrackerService {
 
     final List<Map<String, dynamic>> summary = [];
 
-    // Fetch entries for the week range only
+    // Fetch all entries for user
     final weekEntriesSnapshot = await _firestore
         .collection('time_entries')
         .where('userId', isEqualTo: userId)
-        .where(
-          'startTime',
-          isGreaterThanOrEqualTo: startOfWeekMidnight.millisecondsSinceEpoch,
-        )
-        .where(
-          'startTime',
-          isLessThanOrEqualTo: endOfWeek.millisecondsSinceEpoch,
-        )
         .get();
 
-    final weekEntries =
-        weekEntriesSnapshot.docs
+    final weekEntries = weekEntriesSnapshot.docs
             .map((doc) => TimeEntry.fromMap(doc.id, doc.data()))
+            .where((entry) {
+              return entry.startTime.millisecondsSinceEpoch >= 
+                     startOfWeekMidnight.millisecondsSinceEpoch &&
+                     entry.startTime.millisecondsSinceEpoch <= 
+                     endOfWeek.millisecondsSinceEpoch;
+            })
             .toList();
 
     for (int i = 0; i < 7; i++) {
@@ -436,23 +437,20 @@ class TimeTrackerService {
 
     final List<Map<String, dynamic>> summary = [];
 
-    // Fetch entries for the 30-day range
+    // Fetch all entries for user
     final entriesSnapshot = await _firestore
         .collection('time_entries')
         .where('userId', isEqualTo: userId)
-        .where(
-          'startTime',
-          isGreaterThanOrEqualTo: startOfPeriodMidnight.millisecondsSinceEpoch,
-        )
-        .where(
-          'startTime',
-          isLessThanOrEqualTo: endOfPeriod.millisecondsSinceEpoch,
-        )
         .get();
 
-    final entries =
-        entriesSnapshot.docs
+    final entries = entriesSnapshot.docs
             .map((doc) => TimeEntry.fromMap(doc.id, doc.data()))
+            .where((entry) {
+              return entry.startTime.millisecondsSinceEpoch >= 
+                     startOfPeriodMidnight.millisecondsSinceEpoch &&
+                     entry.startTime.millisecondsSinceEpoch <= 
+                     endOfPeriod.millisecondsSinceEpoch;
+            })
             .toList();
 
     // Generate last 30 days
@@ -489,14 +487,6 @@ class TimeTrackerService {
     final snapshot = await _firestore
         .collection('time_entries')
         .where('userId', isEqualTo: userId)
-        .where(
-          'startTime',
-          isGreaterThanOrEqualTo: startOfDay.millisecondsSinceEpoch,
-        )
-        .where(
-          'startTime',
-          isLessThanOrEqualTo: endOfDay.millisecondsSinceEpoch,
-        )
         .get();
 
     List<double> hourlyBuckets = List.filled(24, 0.0);
@@ -508,7 +498,7 @@ class TimeTrackerService {
       );
       final duration = (data['duration'] ?? 0) as int;
 
-      // Double check range (redundant but safe)
+      // Double check range
       if (startTime.isAfter(startOfDay.subtract(const Duration(seconds: 1))) &&
           startTime.isBefore(endOfDay.add(const Duration(seconds: 1)))) {
         int hour = startTime.hour;
@@ -526,44 +516,46 @@ class TimeTrackerService {
     DateTime? startDate,
     DateTime? endDate,
   }) {
+    // Only filter by userId in Firestore to avoid index issues
     Query<Map<String, dynamic>> queryRef = _firestore
         .collection('time_entries')
         .where('userId', isEqualTo: userId);
-
-    // Apply range filter on startTime if provided
-    if (startDate != null) {
-      final s = DateTime(startDate.year, startDate.month, startDate.day);
-      queryRef = queryRef.where(
-        'startTime',
-        isGreaterThanOrEqualTo: s.millisecondsSinceEpoch,
-      );
-    }
-    if (endDate != null) {
-      final e = DateTime(
-        endDate.year,
-        endDate.month,
-        endDate.day,
-        23,
-        59,
-        59,
-      );
-      queryRef = queryRef.where(
-        'startTime',
-        isLessThanOrEqualTo: e.millisecondsSinceEpoch,
-      );
-    }
-
-    // Note: Filtering by 'category' AND range on 'startTime' requires a Composite Index in Firestore.
-    if (category != null && category != 'All') {
-      queryRef = queryRef.where('category', isEqualTo: category);
-    }
 
     return queryRef.snapshots().map((snapshot) {
       var entries = snapshot.docs
           .map((doc) => TimeEntry.fromMap(doc.id, doc.data()))
           .toList();
 
-      // Client-side filtering for text query (Firestore doesn't support substring search natively easily)
+      // Client-side filtering
+      
+      // Range filter
+      if (startDate != null) {
+        final s = DateTime(startDate.year, startDate.month, startDate.day);
+        entries = entries.where((e) => 
+            e.startTime.millisecondsSinceEpoch >= s.millisecondsSinceEpoch
+        ).toList();
+      }
+      
+      if (endDate != null) {
+        final endOfDay = DateTime(
+          endDate.year,
+          endDate.month,
+          endDate.day,
+          23,
+          59,
+          59,
+        );
+        entries = entries.where((e) => 
+            e.startTime.millisecondsSinceEpoch <= endOfDay.millisecondsSinceEpoch
+        ).toList();
+      }
+
+      // Category filter
+      if (category != null && category != 'All') {
+        entries = entries.where((e) => e.category == category).toList();
+      }
+
+      // Text query filter
       if (query != null && query.isNotEmpty) {
         entries = entries
             .where(

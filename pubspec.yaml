@@ -21,9 +21,9 @@ dependencies:
 
   # Utility packages
   csv: ^6.0.0
-  share_plus: ^10.1.3
+  share_plus: ^12.0.1
   path_provider: ^2.1.1
-  intl: ^0.19.0
+  intl: ^0.20.2
 
 dev_dependencies:
   flutter_test:

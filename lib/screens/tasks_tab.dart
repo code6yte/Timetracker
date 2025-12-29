@@ -643,7 +643,7 @@ class _TasksTabState extends State<TasksTab> {
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(12, 12, 12, 100),
+        padding: const EdgeInsets.fromLTRB(12, 12, 12, 160),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [

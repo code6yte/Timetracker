@@ -382,7 +382,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           isSmallScreen ? 12 : 24,
           8,
           isSmallScreen ? 12 : 24,
-          32,
+          100,
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,

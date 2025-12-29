@@ -25,6 +25,10 @@ class _TimerTabState extends State<TimerTab>
   Task? _selectedTask;
   Task? _focusTask;
 
+  // Focus configuration
+  int _selectedFocusDurationMinutes = 25; // default focus duration in minutes
+  final List<int> _focusDurationOptions = [15, 20, 25, 30, 45, 60];
+
   // Local UI state for focus countdown when expectedDuration is set
   int _displaySeconds =
       0; // shows elapsed (stopwatch) or remaining (focus) depending on _runningEntry.expectedDuration
@@ -40,6 +44,11 @@ class _TimerTabState extends State<TimerTab>
       if (!mounted) return;
       setState(() {
         _runningEntry = entry;
+        // If a focus session is running, reflect its configured expected duration
+        if (_runningEntry != null && _runningEntry!.expectedDuration != null) {
+          _selectedFocusDurationMinutes =
+              (_runningEntry!.expectedDuration! ~/ 60);
+        }
       });
       _startRunningUpdateTimer();
     });
@@ -128,12 +137,12 @@ class _TimerTabState extends State<TimerTab>
         );
         return;
       }
-      // Start focus with expected duration of 25 minutes
+      // Start focus with chosen expected duration
       await _service.startTimer(
         _focusTask!.id,
         _focusTask!.title,
         _focusTask!.projectId.isNotEmpty ? _focusTask!.projectId : 'Inbox',
-        expectedDuration: 25 * 60,
+        expectedDuration: _selectedFocusDurationMinutes * 60,
         source: 'focus',
       );
     }
@@ -211,7 +220,7 @@ class _TimerTabState extends State<TimerTab>
                 (_runningEntry != null &&
                     _runningEntry!.expectedDuration != null)
                 ? _displaySeconds
-                : _displaySeconds,
+                : (_selectedFocusDurationMinutes * 60),
             isRunning:
                 (_runningEntry != null &&
                 _runningEntry!.expectedDuration != null),
@@ -236,12 +245,46 @@ class _TimerTabState extends State<TimerTab>
 
     return SingleChildScrollView(
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        padding: const EdgeInsets.fromLTRB(12, 12, 12, 100),
         child: Column(
           children: [
             _buildTaskSelector(onTaskChanged, task),
             const SizedBox(height: 12),
             if (!isStopwatch) ...[
+              const SizedBox(height: 8),
+              // Duration selector for focus sessions
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12.0),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      'Duration:',
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        fontSize: 14,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    DropdownButton<int>(
+                      value: _selectedFocusDurationMinutes,
+                      items: _focusDurationOptions
+                          .map(
+                            (d) => DropdownMenuItem<int>(
+                              value: d,
+                              child: Text('$d min'),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: isRunning
+                          ? null
+                          : (v) => setState(() {
+                              if (v != null) _selectedFocusDurationMinutes = v;
+                            }),
+                    ),
+                  ],
+                ),
+              ),
               const SizedBox(height: 8),
               SizedBox(
                 width: 240, // Slightly smaller ring
@@ -251,10 +294,21 @@ class _TimerTabState extends State<TimerTab>
                   children: [
                     SizedBox.expand(
                       child: CircularProgressIndicator(
-                        value: seconds / (25 * 60),
+                        value:
+                            1.0 -
+                            (seconds /
+                                (((_runningEntry != null &&
+                                            _runningEntry!.expectedDuration !=
+                                                null)
+                                        ? _runningEntry!.expectedDuration!
+                                        : (_selectedFocusDurationMinutes * 60))
+                                    .toDouble())),
                         strokeWidth: 12,
                         valueColor: AlwaysStoppedAnimation<Color>(accentColor),
-                        backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.2),
+                        backgroundColor: Theme.of(context)
+                            .colorScheme
+                            .surfaceContainerHighest
+                            .withValues(alpha: 0.2),
                         strokeCap: StrokeCap.round,
                       ),
                     ),

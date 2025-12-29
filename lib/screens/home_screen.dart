@@ -495,14 +495,13 @@ class _HomeScreenState extends State<HomeScreen> {
           _currentIndex == 0 ? _buildDashboard() : _tabs[_currentIndex],
           if (_currentIndex == 0)
             Positioned(
-              bottom: 24,
+              bottom: 96,
               right: 24,
-              child: FloatingActionButton.extended(
+              child: FloatingActionButton(
                 heroTag: 'add_fab',
                 onPressed: () => _showAddMenu(context),
-                icon: const Icon(Icons.add),
-                label: const Text('Add'),
                 backgroundColor: Theme.of(context).colorScheme.primary,
+                child: const Icon(Icons.add),
               ),
             ),
           // Persistent running stopwatch stop button (hide for focus sessions)
@@ -511,11 +510,12 @@ class _HomeScreenState extends State<HomeScreen> {
             builder: (context, snapshot) {
               final running = snapshot.data;
               // Do not show stop FAB for focus sessions (sync only with stopwatch)
-              if (running == null || running.source == 'focus') {
+              // Also hide if on Dashboard (index 0) or Timer tab (index 1) to avoid duplication
+              if (running == null || running.source == 'focus' || _currentIndex == 0 || _currentIndex == 1) {
                 return const SizedBox.shrink();
               }
               return Positioned(
-                bottom: 24,
+                bottom: 96,
                 left: 24,
                 child: FloatingActionButton.extended(
                   heroTag: 'stop_fab',
@@ -527,18 +527,10 @@ class _HomeScreenState extends State<HomeScreen> {
                         : running.taskTitle,
                   ),
                   onPressed: () async {
-                    final messenger = ScaffoldMessenger.of(context);
                     try {
                       await _service.stopTimer(running.id);
-                      if (!mounted) return;
-                      messenger.showSnackBar(
-                        const SnackBar(content: Text('Timer stopped')),
-                      );
                     } catch (e) {
-                      if (!mounted) return;
-                      messenger.showSnackBar(
-                        SnackBar(content: Text('Failed to stop timer: $e')),
-                      );
+                      debugPrint('Failed to stop timer: $e');
                     }
                   },
                 ),
@@ -602,7 +594,7 @@ class _HomeScreenState extends State<HomeScreen> {
         screenWidth * 0.03,
         12,
         screenWidth * 0.03,
-        100,
+        160,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -623,10 +615,14 @@ class _HomeScreenState extends State<HomeScreen> {
                       }
                       if (snapshot.hasError) {
                         return Center(
-                          child: Text(
-                            'Error loading data',
-                            style: TextStyle(
-                              color: Theme.of(context).colorScheme.error,
+                          child: SingleChildScrollView(
+                            child: Text(
+                              'Error: ${snapshot.error}',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                color: Theme.of(context).colorScheme.error,
+                                fontSize: 12,
+                              ),
                             ),
                           ),
                         );
@@ -984,7 +980,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
 
           Text(
-            'Recent Tasks',
+            'Tasks',
             style: TextStyle(
               color: Theme.of(context).colorScheme.onSurfaceVariant,
               fontSize: 16,
@@ -1013,7 +1009,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   padding: const EdgeInsets.all(12),
                   child: Center(
                     child: Text(
-                      'No recent tasks',
+                      'No tasks yet',
                       style: TextStyle(
                         color: Theme.of(context).colorScheme.onSurfaceVariant,
                       ),
@@ -1021,186 +1017,118 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 );
               }
-              final recent = tasks.take(3).toList();
-              return Column(
-                children: [
-                  ...recent.map(
-                    (t) => Padding(
-                      padding: const EdgeInsets.only(bottom: 8.0),
-                      child: GlassContainer(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 8,
+
+              return StreamBuilder<TimeEntry?>(
+                stream: _service.getRunningTimer(),
+                builder: (context, runningSnap) {
+                  final runningEntry = runningSnap.data;
+                  
+                  return ListView.separated(
+                    shrinkWrap: true,
+                    physics: const BouncingScrollPhysics(),
+                    itemCount: tasks.length,
+                    separatorBuilder: (context, index) => const SizedBox(height: 8),
+                    itemBuilder: (context, index) {
+                      final t = tasks[index];
+                      final isTaskRunning = runningEntry != null && runningEntry.taskId == t.id;
+
+                      return Dismissible(
+                        key: Key(t.id),
+                        direction: DismissDirection.endToStart,
+                        background: Container(
+                          alignment: Alignment.centerRight,
+                          padding: const EdgeInsets.only(right: 20),
+                          decoration: BoxDecoration(
+                            color: Colors.redAccent,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Icon(Icons.delete, color: Colors.white),
                         ),
-                        color: _safeParseColor(t.color),
-                        opacity: 0.06,
-                        child: Row(
-                          children: [
-                            Container(
-                              width: 8,
-                              height: 36,
-                              decoration: BoxDecoration(
-                                color: _safeParseColor(t.color),
-                                borderRadius: BorderRadius.circular(4),
+                        onDismissed: (direction) async {
+                          final messenger = ScaffoldMessenger.of(context);
+                          await _service.deleteTask(t.id);
+                          
+                          messenger.hideCurrentSnackBar();
+                          messenger.showSnackBar(
+                            SnackBar(
+                              content: Text('Deleted "${t.title}"'),
+                              action: SnackBarAction(
+                                label: 'UNDO',
+                                onPressed: () => _service.undoDeleteTask(t.id),
                               ),
                             ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Text(
-                                t.title,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  color: Theme.of(
-                                    context,
-                                  ).colorScheme.onSurface,
+                          );
+                        },
+                        child: GestureDetector(
+                          onTap: () => _showEditTaskDialog(t),
+                          child: GlassContainer(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 8,
+                            ),
+                            color: _safeParseColor(t.color),
+                            opacity: 0.06,
+                            child: Row(
+                              children: [
+                                Container(
+                                  width: 8,
+                                  height: 36,
+                                  decoration: BoxDecoration(
+                                    color: _safeParseColor(t.color),
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
                                 ),
-                              ),
-                            ),
-                            IconButton(
-                              icon: const Icon(
-                                Icons.timer,
-                                color: Colors.amberAccent,
-                              ),
-                              tooltip: 'Start Timer',
-                              onPressed: () async {
-                                final messenger = ScaffoldMessenger.of(context);
-                                try {
-                                  await _service.startTimer(
-                                    t.id,
-                                    t.title,
-                                    t.category,
-                                  );
-                                  if (!mounted) return;
-                                  messenger.showSnackBar(
-                                    SnackBar(
-                                      content: Text(
-                                        'Timer started for ${t.title}',
-                                      ),
-                                    ),
-                                  );
-                                } catch (e) {
-                                  messenger.showSnackBar(
-                                    SnackBar(
-                                      content: Text(
-                                        'Failed to start timer: $e',
-                                      ),
-                                    ),
-                                  );
-                                }
-                              },
-                            ),
-                            PopupMenuButton<String>(
-                              icon: const Icon(
-                                Icons.more_vert,
-                                color: Colors.white70,
-                              ),
-                              onSelected: (v) async {
-                                if (v == 'edit') {
-                                  _showEditTaskDialog(t);
-                                } else if (v == 'delete') {
-                                  final messenger = ScaffoldMessenger.of(
-                                    context,
-                                  );
-                                  final confirmed = await showDialog<bool>(
-                                    context: context,
-                                    builder: (context) => AlertDialog(
-                                      backgroundColor:
-                                          Theme.of(
-                                            context,
-                                          ).dialogTheme.backgroundColor ??
-                                          Theme.of(context).colorScheme.surface,
-                                      title: Text(
-                                        'Delete Task',
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        t.title,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
                                         style: TextStyle(
-                                          color: Theme.of(
-                                            context,
-                                          ).colorScheme.onSurface,
+                                          color: Theme.of(context).colorScheme.onSurface,
+                                          fontWeight: FontWeight.w600,
                                         ),
                                       ),
-                                      content: Text(
-                                        'Delete "${t.title}"?',
-                                        style: const TextStyle(
-                                          color: Colors.white70,
+                                      Text(
+                                        t.category,
+                                        style: TextStyle(
+                                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                          fontSize: 12,
                                         ),
                                       ),
-                                      actions: [
-                                        TextButton(
-                                          onPressed: () =>
-                                              Navigator.pop(context, false),
-                                          child: const Text('Cancel'),
-                                        ),
-                                        TextButton(
-                                          onPressed: () =>
-                                              Navigator.pop(context, true),
-                                          child: const Text(
-                                            'Delete',
-                                            style: TextStyle(
-                                              color: Colors.redAccent,
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  );
-                                  if (confirmed == true) {
-                                    try {
-                                      await _service.deleteTask(t.id);
-                                      if (!mounted) return;
-                                      messenger.showSnackBar(
-                                        const SnackBar(
-                                          content: Text('Task deleted'),
-                                        ),
-                                      );
-                                    } catch (e) {
-                                      if (!mounted) return;
-                                      messenger.showSnackBar(
-                                        SnackBar(
-                                          content: Text(
-                                            'Failed to delete task: $e',
-                                          ),
-                                        ),
+                                    ],
+                                  ),
+                                ),
+                                IconButton(
+                                  icon: Icon(
+                                    isTaskRunning ? Icons.stop_circle_rounded : Icons.play_arrow_rounded,
+                                    color: isTaskRunning ? Colors.redAccent : Colors.amberAccent,
+                                    size: 32,
+                                  ),
+                                  tooltip: isTaskRunning ? 'Stop Timer' : 'Start Timer',
+                                  onPressed: () {
+                                    if (isTaskRunning) {
+                                      _service.stopTimer(runningEntry.id);
+                                    } else {
+                                      _service.startTimer(
+                                        t.id,
+                                        t.title,
+                                        t.category,
                                       );
                                     }
-                                  }
-                                }
-                              },
-                              itemBuilder: (_) => const [
-                                PopupMenuItem(
-                                  value: 'edit',
-                                  child: Text('Edit'),
-                                ),
-                                PopupMenuItem(
-                                  value: 'delete',
-                                  child: Text('Delete'),
+                                  },
                                 ),
                               ],
                             ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                  if (tasks.length > 3)
-                    TextButton(
-                      onPressed: () {
-                        setState(() {
-                          _currentIndex = 0;
-                        });
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Navigate to full tasks list'),
                           ),
-                        );
-                      },
-                      child: Text(
-                        'View All Tasks',
-                        style: TextStyle(
-                          color: Theme.of(context).colorScheme.primary,
                         ),
-                      ),
-                    ),
-                ],
+                      );
+                    },
+                  );
+                },
               );
             },
           ),
