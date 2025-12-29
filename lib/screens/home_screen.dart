@@ -188,14 +188,16 @@ class _HomeScreenState extends State<HomeScreen> {
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) {
           return AlertDialog(
-            backgroundColor: const Color(0xFF1E1E1E),
+            backgroundColor:
+                Theme.of(context).dialogTheme.backgroundColor ??
+                Theme.of(context).colorScheme.surface,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(24),
             ),
-            title: const Text(
+            title: Text(
               'New Task',
               style: TextStyle(
-                color: Colors.white,
+                color: Theme.of(context).colorScheme.onSurface,
                 fontWeight: FontWeight.bold,
               ),
             ),
@@ -204,17 +206,27 @@ class _HomeScreenState extends State<HomeScreen> {
               children: [
                 TextField(
                   controller: taskController,
-                  style: const TextStyle(color: Colors.white),
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.onSurface,
+                  ),
                   autofocus: true,
                   decoration: InputDecoration(
                     labelText: 'Task name',
-                    labelStyle: const TextStyle(color: Colors.white60),
+                    labelStyle: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
                     enabledBorder: OutlineInputBorder(
-                      borderSide: BorderSide(color: Colors.white24),
+                      borderSide: BorderSide(
+                        color: Theme.of(context).colorScheme.onSurface.withAlpha(
+                          (0.18 * 255).toInt(),
+                        ),
+                      ),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     focusedBorder: OutlineInputBorder(
-                      borderSide: BorderSide(color: Colors.amberAccent),
+                      borderSide: BorderSide(
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
                       borderRadius: BorderRadius.circular(12),
                     ),
                   ),
@@ -263,9 +275,11 @@ class _HomeScreenState extends State<HomeScreen> {
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(context),
-                child: const Text(
+                child: Text(
                   'Cancel',
-                  style: TextStyle(color: Colors.white54),
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
                 ),
               ),
               ElevatedButton(
@@ -314,14 +328,18 @@ class _HomeScreenState extends State<HomeScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1E1E1E),
-        title: const Text(
+        backgroundColor:
+            Theme.of(context).dialogTheme.backgroundColor ??
+            Theme.of(context).colorScheme.surface,
+        title: Text(
           'Delete Project',
-          style: TextStyle(color: Colors.white),
+          style: TextStyle(color: Theme.of(context).colorScheme.onSurface),
         ),
         content: Text(
           'Delete "${p.name}"? This will not delete tasks automatically.',
-          style: const TextStyle(color: Colors.white70),
+          style: TextStyle(
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
         ),
         actions: [
           TextButton(
@@ -360,14 +378,16 @@ class _HomeScreenState extends State<HomeScreen> {
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) {
           return AlertDialog(
-            backgroundColor: const Color(0xFF1E1E1E),
+            backgroundColor:
+                Theme.of(context).dialogTheme.backgroundColor ??
+                Theme.of(context).colorScheme.surface,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(24),
             ),
-            title: const Text(
+            title: Text(
               'Edit Project',
               style: TextStyle(
-                color: Colors.white,
+                color: Theme.of(context).colorScheme.onSurface,
                 fontWeight: FontWeight.bold,
               ),
             ),
@@ -377,12 +397,20 @@ class _HomeScreenState extends State<HomeScreen> {
                 children: [
                   TextField(
                     controller: nameController,
-                    style: const TextStyle(color: Colors.white),
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurface,
+                    ),
                     decoration: InputDecoration(
                       labelText: 'Project Name',
-                      labelStyle: const TextStyle(color: Colors.white60),
+                      labelStyle: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
                       enabledBorder: OutlineInputBorder(
-                        borderSide: const BorderSide(color: Colors.white24),
+                        borderSide: BorderSide(
+                          color: Theme.of(context).colorScheme.onSurface.withAlpha(
+                            (0.18 * 255).toInt(),
+                          ),
+                        ),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       focusedBorder: OutlineInputBorder(
@@ -408,7 +436,10 @@ class _HomeScreenState extends State<HomeScreen> {
                             color: _safeParseColor(color),
                             shape: BoxShape.circle,
                             border: isSelected
-                                ? Border.all(color: Colors.white, width: 2)
+                                ? Border.all(
+                                    color: Theme.of(context).colorScheme.onSurface,
+                                    width: 2,
+                                  )
                                 : null,
                           ),
                         ),

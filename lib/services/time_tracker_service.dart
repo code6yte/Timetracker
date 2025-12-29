@@ -239,9 +239,24 @@ class TimeTrackerService {
         .where('isRunning', isEqualTo: true)
         .get();
 
+    if (runningTimers.docs.isEmpty) return;
+
+    final batch = _firestore.batch();
+    final endTime = DateTime.now();
+
     for (var doc in runningTimers.docs) {
-      await stopTimer(doc.id);
+      final data = doc.data();
+      final startTime = DateTime.fromMillisecondsSinceEpoch(data['startTime']);
+      final duration = endTime.difference(startTime).inSeconds;
+
+      batch.update(doc.reference, {
+        'endTime': endTime.millisecondsSinceEpoch,
+        'duration': duration,
+        'isRunning': false,
+      });
     }
+
+    await batch.commit();
   }
 
   // Get currently running timer
@@ -276,18 +291,18 @@ class TimeTrackerService {
     return _firestore
         .collection('time_entries')
         .where('userId', isEqualTo: userId)
+        .where(
+          'startTime',
+          isGreaterThanOrEqualTo: startOfDay.millisecondsSinceEpoch,
+        )
+        .where(
+          'startTime',
+          isLessThanOrEqualTo: endOfDay.millisecondsSinceEpoch,
+        )
         .snapshots()
         .map((snapshot) {
           final entries = snapshot.docs
               .map((doc) => TimeEntry.fromMap(doc.id, doc.data()))
-              .where((entry) {
-                return entry.startTime.isAfter(
-                      startOfDay.subtract(const Duration(seconds: 1)),
-                    ) &&
-                    entry.startTime.isBefore(
-                      endOfDay.add(const Duration(seconds: 1)),
-                    );
-              })
               .toList();
           // Sort by start time
           entries.sort((a, b) => b.startTime.compareTo(a.startTime));
@@ -319,23 +334,23 @@ class TimeTrackerService {
     final entries = await _firestore
         .collection('time_entries')
         .where('userId', isEqualTo: userId)
+        .where(
+          'startTime',
+          isGreaterThanOrEqualTo: startOfDay.millisecondsSinceEpoch,
+        )
+        .where(
+          'startTime',
+          isLessThanOrEqualTo: endOfDay.millisecondsSinceEpoch,
+        )
         .get();
 
     final Map<String, int> categoryTime = {};
 
     for (var doc in entries.docs) {
       final data = doc.data();
-      final startTime = DateTime.fromMillisecondsSinceEpoch(
-        data['startTime'] ?? 0,
-      );
-
-      // Filter by date range in memory
-      if (startTime.isAfter(startOfDay.subtract(const Duration(seconds: 1))) &&
-          startTime.isBefore(endOfDay.add(const Duration(seconds: 1)))) {
-        final category = data['category'] ?? 'Uncategorized';
-        final duration = (data['duration'] ?? 0) as int;
-        categoryTime[category] = (categoryTime[category] ?? 0) + duration;
-      }
+      final category = data['category'] ?? 'Uncategorized';
+      final duration = (data['duration'] ?? 0) as int;
+      categoryTime[category] = (categoryTime[category] ?? 0) + duration;
     }
 
     return categoryTime;
@@ -345,13 +360,35 @@ class TimeTrackerService {
   Future<List<Map<String, dynamic>>> getWeeklySummary() async {
     final now = DateTime.now();
     final startOfWeek = now.subtract(Duration(days: now.weekday - 1));
+    final startOfWeekMidnight = DateTime(
+      startOfWeek.year,
+      startOfWeek.month,
+      startOfWeek.day,
+    );
+    final endOfWeek = now.add(
+      Duration(days: 7 - now.weekday, hours: 23, minutes: 59, seconds: 59),
+    );
+
     final List<Map<String, dynamic>> summary = [];
 
-    // Fetch all time entries for the user once
-    final allEntries = await _firestore
+    // Fetch entries for the week range only
+    final weekEntriesSnapshot = await _firestore
         .collection('time_entries')
         .where('userId', isEqualTo: userId)
+        .where(
+          'startTime',
+          isGreaterThanOrEqualTo: startOfWeekMidnight.millisecondsSinceEpoch,
+        )
+        .where(
+          'startTime',
+          isLessThanOrEqualTo: endOfWeek.millisecondsSinceEpoch,
+        )
         .get();
+
+    final weekEntries =
+        weekEntriesSnapshot.docs
+            .map((doc) => TimeEntry.fromMap(doc.id, doc.data()))
+            .toList();
 
     for (int i = 0; i < 7; i++) {
       final date = startOfWeek.add(Duration(days: i));
@@ -359,18 +396,12 @@ class TimeTrackerService {
       final endOfDay = DateTime(date.year, date.month, date.day, 23, 59, 59);
 
       int totalDuration = 0;
-      for (var doc in allEntries.docs) {
-        final data = doc.data();
-        final startTime = DateTime.fromMillisecondsSinceEpoch(
-          data['startTime'] ?? 0,
-        );
-
-        // Filter by date range in memory
-        if (startTime.isAfter(
+      for (var entry in weekEntries) {
+        if (entry.startTime.isAfter(
               startOfDay.subtract(const Duration(seconds: 1)),
             ) &&
-            startTime.isBefore(endOfDay.add(const Duration(seconds: 1)))) {
-          totalDuration += (data['duration'] ?? 0) as int;
+            entry.startTime.isBefore(endOfDay.add(const Duration(seconds: 1)))) {
+          totalDuration += entry.duration;
         }
       }
 
@@ -378,6 +409,72 @@ class TimeTrackerService {
         'date': date,
         'duration': totalDuration,
         'hours': (totalDuration / 3600).toStringAsFixed(1),
+      });
+    }
+
+    return summary;
+  }
+
+  // Get summary for the last 30 days (for heatmap)
+  Future<List<Map<String, dynamic>>> getThirtyDaySummary() async {
+    final now = DateTime.now();
+    // Start from 29 days ago to include today (30 days total)
+    final startOfPeriod = now.subtract(const Duration(days: 29));
+    final startOfPeriodMidnight = DateTime(
+      startOfPeriod.year,
+      startOfPeriod.month,
+      startOfPeriod.day,
+    );
+    final endOfPeriod = DateTime(
+      now.year,
+      now.month,
+      now.day,
+      23,
+      59,
+      59,
+    );
+
+    final List<Map<String, dynamic>> summary = [];
+
+    // Fetch entries for the 30-day range
+    final entriesSnapshot = await _firestore
+        .collection('time_entries')
+        .where('userId', isEqualTo: userId)
+        .where(
+          'startTime',
+          isGreaterThanOrEqualTo: startOfPeriodMidnight.millisecondsSinceEpoch,
+        )
+        .where(
+          'startTime',
+          isLessThanOrEqualTo: endOfPeriod.millisecondsSinceEpoch,
+        )
+        .get();
+
+    final entries =
+        entriesSnapshot.docs
+            .map((doc) => TimeEntry.fromMap(doc.id, doc.data()))
+            .toList();
+
+    // Generate last 30 days
+    for (int i = 0; i < 30; i++) {
+      final date = startOfPeriod.add(Duration(days: i));
+      final startOfDay = DateTime(date.year, date.month, date.day);
+      final endOfDay = DateTime(date.year, date.month, date.day, 23, 59, 59);
+
+      int totalDuration = 0;
+      for (var entry in entries) {
+        if (entry.startTime.isAfter(
+              startOfDay.subtract(const Duration(seconds: 1)),
+            ) &&
+            entry.startTime.isBefore(endOfDay.add(const Duration(seconds: 1)))) {
+          totalDuration += entry.duration;
+        }
+      }
+
+      summary.add({
+        'date': date,
+        'duration': totalDuration, // in seconds
+        'hours': (totalDuration / 3600),
       });
     }
 
@@ -392,6 +489,14 @@ class TimeTrackerService {
     final snapshot = await _firestore
         .collection('time_entries')
         .where('userId', isEqualTo: userId)
+        .where(
+          'startTime',
+          isGreaterThanOrEqualTo: startOfDay.millisecondsSinceEpoch,
+        )
+        .where(
+          'startTime',
+          isLessThanOrEqualTo: endOfDay.millisecondsSinceEpoch,
+        )
         .get();
 
     List<double> hourlyBuckets = List.filled(24, 0.0);
@@ -403,6 +508,7 @@ class TimeTrackerService {
       );
       final duration = (data['duration'] ?? 0) as int;
 
+      // Double check range (redundant but safe)
       if (startTime.isAfter(startOfDay.subtract(const Duration(seconds: 1))) &&
           startTime.isBefore(endOfDay.add(const Duration(seconds: 1)))) {
         int hour = startTime.hour;
@@ -420,48 +526,56 @@ class TimeTrackerService {
     DateTime? startDate,
     DateTime? endDate,
   }) {
-    return _firestore
+    Query<Map<String, dynamic>> queryRef = _firestore
         .collection('time_entries')
-        .where('userId', isEqualTo: userId)
-        .snapshots()
-        .map((snapshot) {
-          var entries = snapshot.docs
-              .map((doc) => TimeEntry.fromMap(doc.id, doc.data()))
-              .toList();
+        .where('userId', isEqualTo: userId);
 
-          if (query != null && query.isNotEmpty) {
-            entries = entries
-                .where(
-                  (e) =>
-                      e.taskTitle.toLowerCase().contains(query.toLowerCase()),
-                )
-                .toList();
-          }
-          if (category != null && category != 'All') {
-            entries = entries.where((e) => e.category == category).toList();
-          }
-          if (startDate != null) {
-            entries = entries
-                .where(
-                  (e) => e.startTime.isAfter(
-                    startDate.subtract(const Duration(seconds: 1)),
-                  ),
-                )
-                .toList();
-          }
-          if (endDate != null) {
-            entries = entries
-                .where(
-                  (e) => e.startTime.isBefore(
-                    endDate.add(const Duration(days: 1)),
-                  ),
-                )
-                .toList();
-          }
+    // Apply range filter on startTime if provided
+    if (startDate != null) {
+      final s = DateTime(startDate.year, startDate.month, startDate.day);
+      queryRef = queryRef.where(
+        'startTime',
+        isGreaterThanOrEqualTo: s.millisecondsSinceEpoch,
+      );
+    }
+    if (endDate != null) {
+      final e = DateTime(
+        endDate.year,
+        endDate.month,
+        endDate.day,
+        23,
+        59,
+        59,
+      );
+      queryRef = queryRef.where(
+        'startTime',
+        isLessThanOrEqualTo: e.millisecondsSinceEpoch,
+      );
+    }
 
-          entries.sort((a, b) => b.startTime.compareTo(a.startTime));
-          return entries;
-        });
+    // Note: Filtering by 'category' AND range on 'startTime' requires a Composite Index in Firestore.
+    if (category != null && category != 'All') {
+      queryRef = queryRef.where('category', isEqualTo: category);
+    }
+
+    return queryRef.snapshots().map((snapshot) {
+      var entries = snapshot.docs
+          .map((doc) => TimeEntry.fromMap(doc.id, doc.data()))
+          .toList();
+
+      // Client-side filtering for text query (Firestore doesn't support substring search natively easily)
+      if (query != null && query.isNotEmpty) {
+        entries = entries
+            .where(
+              (e) => e.taskTitle.toLowerCase().contains(query.toLowerCase()),
+            )
+            .toList();
+      }
+
+      // Sort by start time
+      entries.sort((a, b) => b.startTime.compareTo(a.startTime));
+      return entries;
+    });
   }
 
   // Log a Pomodoro session

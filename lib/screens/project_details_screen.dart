@@ -46,13 +46,19 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen> {
         ),
         content: TextField(
           controller: _taskController,
-          style: const TextStyle(color: Colors.white),
+          style: TextStyle(color: Theme.of(context).colorScheme.onSurface),
           autofocus: true,
           decoration: InputDecoration(
             labelText: 'Task Name',
-            labelStyle: const TextStyle(color: Colors.white60),
+            labelStyle: TextStyle(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
             enabledBorder: OutlineInputBorder(
-              borderSide: const BorderSide(color: Colors.white24),
+              borderSide: BorderSide(
+                color: Theme.of(context).colorScheme.onSurface.withAlpha(
+                  (0.18 * 255).toInt(),
+                ),
+              ),
               borderRadius: BorderRadius.circular(12),
             ),
             focusedBorder: OutlineInputBorder(
@@ -64,9 +70,11 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text(
+            child: Text(
               'Cancel',
-              style: TextStyle(color: Colors.white54),
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
             ),
           ),
           ElevatedButton(
@@ -129,13 +137,19 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen> {
         ),
         content: TextField(
           controller: _taskController,
-          style: const TextStyle(color: Colors.white),
+          style: TextStyle(color: Theme.of(context).colorScheme.onSurface),
           autofocus: true,
           decoration: InputDecoration(
             labelText: 'Task Name',
-            labelStyle: const TextStyle(color: Colors.white60),
+            labelStyle: TextStyle(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
             enabledBorder: OutlineInputBorder(
-              borderSide: const BorderSide(color: Colors.white24),
+              borderSide: BorderSide(
+                color: Theme.of(context).colorScheme.onSurface.withAlpha(
+                  (0.18 * 255).toInt(),
+                ),
+              ),
               borderRadius: BorderRadius.circular(12),
             ),
             focusedBorder: OutlineInputBorder(
@@ -147,9 +161,11 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text(
+            child: Text(
               'Cancel',
-              style: TextStyle(color: Colors.white54),
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
             ),
           ),
           ElevatedButton(
@@ -197,18 +213,27 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1E1E1E),
-        title: const Text('Delete Task', style: TextStyle(color: Colors.white)),
+        backgroundColor:
+            Theme.of(context).dialogTheme.backgroundColor ??
+            Theme.of(context).colorScheme.surface,
+        title: Text(
+          'Delete Task',
+          style: TextStyle(color: Theme.of(context).colorScheme.onSurface),
+        ),
         content: Text(
           'Delete "${task.title}"?',
-          style: const TextStyle(color: Colors.white70),
+          style: TextStyle(
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text(
+            child: Text(
               'Cancel',
-              style: TextStyle(color: Colors.white54),
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
             ),
           ),
           TextButton(
@@ -243,18 +268,20 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen> {
     final accentColor = _safeParseColor(widget.project.color);
 
     return Scaffold(
-      backgroundColor: Colors.transparent,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
         title: Text(
           widget.project.name,
-          style: const TextStyle(fontWeight: FontWeight.bold),
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            color: Theme.of(context).colorScheme.onSurface,
+          ),
         ),
         backgroundColor: Colors.transparent,
         elevation: 0,
         centerTitle: true,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.white),
-          onPressed: () => Navigator.of(context).pop(),
+        iconTheme: IconThemeData(
+          color: Theme.of(context).colorScheme.onSurface,
         ),
       ),
       body: StreamBuilder<List<Task>>(
@@ -282,7 +309,10 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen> {
                   const SizedBox(height: 16),
                   Text(
                     'No tasks yet in ${widget.project.name}',
-                    style: const TextStyle(color: Colors.white54, fontSize: 16),
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      fontSize: 16,
+                    ),
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 24),
@@ -336,8 +366,8 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen> {
                       task.title,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Colors.white,
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurface,
                         fontWeight: FontWeight.w600,
                         fontSize: 16,
                       ),
@@ -404,9 +434,11 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen> {
                               child: Text('Delete'),
                             ),
                           ],
-                          icon: const Icon(
+                          icon: Icon(
                             Icons.more_vert,
-                            color: Colors.white70,
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onSurfaceVariant,
                           ),
                         ),
                       ],
@@ -421,7 +453,6 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen> {
       floatingActionButton: FloatingActionButton(
         onPressed: _showAddTaskDialog,
         backgroundColor: accentColor,
-
         elevation: 8,
         child: const Icon(Icons.add_task, color: Colors.white, size: 28),
       ),

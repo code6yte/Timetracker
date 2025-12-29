@@ -26,6 +26,8 @@ A compact Flutter app with Firebase integration for authentication and note trac
 
 - **UI helpers**
   - Reusable widgets (e.g., `GlassContainer` / `GlassScaffold`) used for the login and main UI (see `lib/widgets/`).
+- **Export data (CSV)**
+  - Export tracked time entries as CSV from the Settings screen (Data → Export Data). The CSV is written to the app documents directory and can be shared via the system share sheet.
 
 ---
 

@@ -37,6 +37,7 @@ class _TimerTabState extends State<TimerTab>
 
     // Listen for any running timer persisted in Firestore
     _service.getRunningTimer().listen((entry) {
+      if (!mounted) return;
       setState(() {
         _runningEntry = entry;
       });
@@ -99,6 +100,7 @@ class _TimerTabState extends State<TimerTab>
       await _service.stopTimer(_runningEntry!.id);
     } else {
       if (_selectedTask == null) {
+        if (!mounted) return;
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(const SnackBar(content: Text('Select a task first')));
@@ -120,6 +122,7 @@ class _TimerTabState extends State<TimerTab>
       await _service.stopTimer(_runningEntry!.id);
     } else {
       if (_focusTask == null) {
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Select a task for focus session')),
         );
@@ -159,9 +162,12 @@ class _TimerTabState extends State<TimerTab>
     return Scaffold(
       backgroundColor: Colors.transparent,
       appBar: AppBar(
-        title: const Text(
+        title: Text(
           'Timer & Focus',
-          style: TextStyle(fontWeight: FontWeight.bold),
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            color: Theme.of(context).colorScheme.onSurface,
+          ),
         ),
         backgroundColor: Colors.transparent,
         elevation: 0,
@@ -248,9 +254,7 @@ class _TimerTabState extends State<TimerTab>
                         value: seconds / (25 * 60),
                         strokeWidth: 12,
                         valueColor: AlwaysStoppedAnimation<Color>(accentColor),
-                        backgroundColor: Colors.white.withAlpha(
-                          (0.05 * 255).toInt(),
-                        ),
+                        backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.2),
                         strokeCap: StrokeCap.round,
                       ),
                     ),
@@ -259,9 +263,7 @@ class _TimerTabState extends State<TimerTab>
                       style: TextStyle(
                         fontSize: 64, // Slightly smaller text
                         fontWeight: FontWeight.w200,
-                        color: Theme.of(context).brightness == Brightness.light
-                            ? Colors.black
-                            : Colors.white,
+                        color: Theme.of(context).colorScheme.onSurface,
                         letterSpacing: -2,
                       ),
                     ),
@@ -274,9 +276,7 @@ class _TimerTabState extends State<TimerTab>
                 style: TextStyle(
                   fontSize: 84, // Slightly smaller text
                   fontWeight: FontWeight.w200,
-                  color: Theme.of(context).brightness == Brightness.light
-                      ? Colors.black
-                      : Colors.white,
+                  color: Theme.of(context).colorScheme.onSurface,
                   letterSpacing: -4,
                 ),
               ),
@@ -301,8 +301,8 @@ class _TimerTabState extends State<TimerTab>
           boxShadow: [
             BoxShadow(
               color: isRunning
-                  ? Colors.redAccent.withAlpha((0.4 * 255).toInt())
-                  : color.withAlpha((0.4 * 255).toInt()),
+                  ? Colors.redAccent.withValues(alpha: 0.4)
+                  : color.withValues(alpha: 0.4),
               blurRadius: 20,
               spreadRadius: 2,
             ),

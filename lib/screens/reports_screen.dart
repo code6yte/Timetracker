@@ -166,7 +166,10 @@ class _ReportsScreenState extends State<ReportsScreen> {
               ),
               const SizedBox(width: 16),
               IconButton(
-                icon: const Icon(Icons.calendar_today, color: Colors.white),
+                icon: Icon(
+                  Icons.calendar_today,
+                  color: Theme.of(context).colorScheme.onSurface,
+                ),
                 onPressed: () async {
                   final picked = await showDatePicker(
                     context: context,
@@ -243,9 +246,15 @@ class _ReportsScreenState extends State<ReportsScreen> {
             }
             if (snapshot.hasError) {
               return Center(
-                child: Text(
-                  'Error loading timeline: ${snapshot.error}',
-                  style: const TextStyle(color: Colors.redAccent),
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: SelectableText(
+                    'Error loading timeline: ${snapshot.error}',
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.error,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
                 ),
               );
             }
@@ -254,9 +263,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                 child: Text(
                   'No activity for this date',
                   style: TextStyle(
-                    color: Theme.of(context).brightness == Brightness.light
-                        ? Colors.black
-                        : Colors.white54,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
                   ),
                 ),
               );
@@ -277,11 +284,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
                           ? Text(
                               '$i',
                               style: TextStyle(
-                                color:
-                                    Theme.of(context).brightness ==
-                                        Brightness.light
-                                    ? Colors.black
-                                    : Colors.white24,
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onSurfaceVariant,
                                 fontSize: 10,
                               ),
                             )
@@ -341,6 +346,18 @@ class _ReportsScreenState extends State<ReportsScreen> {
     return FutureBuilder<List<double>>(
       future: _service.getHourlyProductivity(_selectedDate),
       builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: SelectableText(
+                'Error loading chart: ${snapshot.error}',
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+                textAlign: TextAlign.center,
+              ),
+            ),
+          );
+        }
         if (!snapshot.hasData) {
           return const Center(child: CircularProgressIndicator());
         }
@@ -375,9 +392,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                     Text(
                       '$i',
                       style: TextStyle(
-                        color: Theme.of(context).brightness == Brightness.light
-                            ? Colors.black
-                            : Colors.white54,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
                         fontSize: 8,
                       ),
                     ),
@@ -399,16 +414,30 @@ class _ReportsScreenState extends State<ReportsScreen> {
         endDate: _selectedDate,
       ),
       builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: SelectableText(
+                'Error loading logs: ${snapshot.error}',
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+                textAlign: TextAlign.center,
+              ),
+            ),
+          );
+        }
         if (!snapshot.hasData) {
           return const Center(child: CircularProgressIndicator());
         }
         final entries = snapshot.data!;
 
         if (entries.isEmpty) {
-          return const Center(
+          return Center(
             child: Text(
               'No logs found for this criteria',
-              style: TextStyle(color: Colors.white54),
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
             ),
           );
         }
@@ -428,8 +457,8 @@ class _ReportsScreenState extends State<ReportsScreen> {
                   e.taskTitle,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Colors.white,
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.onSurface,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
@@ -437,7 +466,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
                   '${e.category} • ${DateFormat('HH:mm').format(e.startTime)} - ${e.endTime != null ? DateFormat('HH:mm').format(e.endTime!) : "Running"}',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: Colors.white70),
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
                 ),
                 trailing: Text(
                   '${(e.duration / 60).toStringAsFixed(1)}m',
@@ -456,25 +487,55 @@ class _ReportsScreenState extends State<ReportsScreen> {
 
   Widget _buildHeatmap() {
     return FutureBuilder<List<Map<String, dynamic>>>(
-      future: _service
-          .getWeeklySummary(), // I'll use a slightly different logic for 30 days
+      future: _service.getThirtyDaySummary(),
       builder: (context, snapshot) {
-        // Mocking a heatmap grid for now to show visual intent for the project
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        if (snapshot.hasError) {
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: Text(
+                'Error loading heatmap: ${snapshot.error}',
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+                textAlign: TextAlign.center,
+              ),
+            ),
+          );
+        }
+
+        final data = snapshot.data ?? [];
+        // Find max duration to normalize colors
+        double maxDuration = 0;
+        for (var item in data) {
+          if (item['duration'] > maxDuration) {
+            maxDuration = (item['duration'] as int).toDouble();
+          }
+        }
+        if (maxDuration == 0) maxDuration = 1; // Avoid division by zero
+
         return GlassContainer(
           padding: const EdgeInsets.all(16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Row(
+              Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
                     'Less',
-                    style: TextStyle(color: Colors.white54, fontSize: 10),
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      fontSize: 10,
+                    ),
                   ),
                   Text(
                     'More',
-                    style: TextStyle(color: Colors.white54, fontSize: 10),
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      fontSize: 10,
+                    ),
                   ),
                 ],
               ),
@@ -482,19 +543,34 @@ class _ReportsScreenState extends State<ReportsScreen> {
               Wrap(
                 spacing: 4,
                 runSpacing: 4,
-                children: List.generate(35, (index) {
-                  final level = (index % 5) * 0.2; // Mock productivity levels
-                  return Container(
-                    width: 14,
-                    height: 14,
-                    decoration: BoxDecoration(
-                      color: _getAccentColor(
-                        context,
-                      ).withValues(alpha: level.clamp(0.1, 1.0)),
-                      borderRadius: BorderRadius.circular(2),
+                children: data.map((dayData) {
+                  final duration = (dayData['duration'] as int).toDouble();
+                  final level = (duration / maxDuration).clamp(0.1, 1.0);
+                  final date = dayData['date'] as DateTime;
+                  final isToday =
+                      date.year == DateTime.now().year &&
+                      date.month == DateTime.now().month &&
+                      date.day == DateTime.now().day;
+
+                  return Tooltip(
+                    message:
+                        '${DateFormat('MMM d').format(date)}: ${(duration / 3600).toStringAsFixed(1)}h',
+                    child: Container(
+                      width: 14,
+                      height: 14,
+                      decoration: BoxDecoration(
+                        color: _getAccentColor(context).withValues(alpha: level),
+                        borderRadius: BorderRadius.circular(2),
+                        border: isToday
+                            ? Border.all(
+                                color: Theme.of(context).colorScheme.onSurface,
+                                width: 1,
+                              )
+                            : null,
+                      ),
                     ),
                   );
-                }),
+                }).toList(),
               ),
             ],
           ),

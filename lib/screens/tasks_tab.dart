@@ -90,14 +90,16 @@ class _TasksTabState extends State<TasksTab> {
                         ),
                         shape: BoxShape.circle,
                         border: Border.all(
-                          color: isSelected ? Colors.white : Colors.transparent,
+                          color: isSelected
+                              ? Theme.of(context).colorScheme.onSurface
+                              : Colors.transparent,
                           width: 3,
                         ),
                       ),
                       child: isSelected
-                          ? const Icon(
+                          ? Icon(
                               Icons.check,
-                              color: Colors.white,
+                              color: isSelected ? Colors.white : Colors.black,
                               size: 20,
                             )
                           : null,
@@ -110,9 +112,11 @@ class _TasksTabState extends State<TasksTab> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text(
+              child: Text(
                 'Cancel',
-                style: TextStyle(color: Colors.white54),
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
               ),
             ),
             ElevatedButton(
@@ -163,7 +167,12 @@ class _TasksTabState extends State<TasksTab> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
+            child: Text(
+              'Cancel',
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
@@ -204,7 +213,9 @@ class _TasksTabState extends State<TasksTab> {
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
-          backgroundColor: const Color(0xFF1E1E1E),
+          backgroundColor:
+              Theme.of(context).dialogTheme.backgroundColor ??
+              Theme.of(context).colorScheme.surface,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(24),
           ),
@@ -274,9 +285,11 @@ class _TasksTabState extends State<TasksTab> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text(
+              child: Text(
                 'Cancel',
-                style: TextStyle(color: Colors.white54),
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
               ),
             ),
             ElevatedButton(
@@ -348,12 +361,20 @@ class _TasksTabState extends State<TasksTab> {
               children: [
                 TextField(
                   controller: nameController,
-                  style: const TextStyle(color: Colors.white),
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.onSurface,
+                  ),
                   decoration: InputDecoration(
                     labelText: 'Project Name',
-                    labelStyle: const TextStyle(color: Colors.white60),
+                    labelStyle: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
                     enabledBorder: OutlineInputBorder(
-                      borderSide: const BorderSide(color: Colors.white24),
+                      borderSide: BorderSide(
+                        color: Theme.of(context).colorScheme.onSurface.withAlpha(
+                          (0.18 * 255).toInt(),
+                        ),
+                      ),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     focusedBorder: OutlineInputBorder(
@@ -394,7 +415,7 @@ class _TasksTabState extends State<TasksTab> {
                           shape: BoxShape.circle,
                           border: Border.all(
                             color: isSelected
-                                ? Colors.white
+                                ? Theme.of(context).colorScheme.onSurface
                                 : Colors.transparent,
                             width: 3,
                           ),
@@ -418,7 +439,9 @@ class _TasksTabState extends State<TasksTab> {
               onPressed: () => Navigator.pop(context),
               child: Text(
                 'Cancel',
-                style: const TextStyle(color: Colors.white54),
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
               ),
             ),
             ElevatedButton(
@@ -471,30 +494,45 @@ class _TasksTabState extends State<TasksTab> {
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
-          backgroundColor: const Color(0xFF1E1E1E),
+          backgroundColor:
+              Theme.of(context).dialogTheme.backgroundColor ??
+              Theme.of(context).colorScheme.surface,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(24),
           ),
-          title: const Text(
+          title: Text(
             'New Task',
-            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.onSurface,
+              fontWeight: FontWeight.bold,
+            ),
           ),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               TextField(
                 controller: taskTitleController,
-                style: const TextStyle(color: Colors.white),
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurface,
+                ),
                 autofocus: true,
                 decoration: InputDecoration(
                   labelText: 'Task name',
-                  labelStyle: const TextStyle(color: Colors.white60),
+                  labelStyle: TextStyle(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
                   enabledBorder: OutlineInputBorder(
-                    borderSide: BorderSide(color: Colors.white24),
+                    borderSide: BorderSide(
+                      color: Theme.of(context).colorScheme.onSurface.withAlpha(
+                        (0.18 * 255).toInt(),
+                      ),
+                    ),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   focusedBorder: OutlineInputBorder(
-                    borderSide: BorderSide(color: Colors.amberAccent),
+                    borderSide: BorderSide(
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
                     borderRadius: BorderRadius.circular(12),
                   ),
                 ),
@@ -546,15 +584,17 @@ class _TasksTabState extends State<TasksTab> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text(
+              child: Text(
                 'Cancel',
-                style: TextStyle(color: Colors.white54),
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
               ),
             ),
             ElevatedButton(
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.amberAccent,
-                foregroundColor: Colors.black,
+                backgroundColor: Theme.of(context).colorScheme.primary,
+                foregroundColor: Theme.of(context).colorScheme.onPrimary,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
@@ -623,31 +663,31 @@ class _TasksTabState extends State<TasksTab> {
                   child: _buildHeaderAction(
                     icon: Icons.add_task_rounded,
                     label: 'Quick Task',
-                    color: Colors.white,
+                    color: Theme.of(context).colorScheme.onSurface,
                     onTap: _showAddTaskDialog,
                   ),
                 ),
               ],
             ),
             const SizedBox(height: 16),
-            const Text(
+            Text(
               'Projects',
               style: TextStyle(
                 fontSize: 20,
                 fontWeight: FontWeight.w800,
-                color: Colors.white,
+                color: Theme.of(context).colorScheme.onSurface,
                 letterSpacing: -0.4,
               ),
             ),
             const SizedBox(height: 10),
             _buildProjectsSection(),
             const SizedBox(height: 16),
-            const Text(
+            Text(
               'Inbox',
               style: TextStyle(
                 fontSize: 20,
                 fontWeight: FontWeight.w800,
-                color: Colors.white,
+                color: Theme.of(context).colorScheme.onSurface,
                 letterSpacing: -0.4,
               ),
             ),
@@ -700,13 +740,15 @@ class _TasksTabState extends State<TasksTab> {
         final projects = snapshot.data!;
 
         if (projects.isEmpty) {
-          return const GlassContainer(
+          return GlassContainer(
             width: double.infinity,
-            padding: EdgeInsets.all(32),
+            padding: const EdgeInsets.all(32),
             child: Center(
               child: Text(
                 'Create your first project above',
-                style: TextStyle(color: Colors.white38),
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
               ),
             ),
           );
@@ -749,8 +791,8 @@ class _TasksTabState extends State<TasksTab> {
                           project.name,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: Colors.white,
+                          style: TextStyle(
+                            color: Theme.of(context).colorScheme.onSurface,
                             fontWeight: FontWeight.bold,
                             fontSize: 16,
                           ),
@@ -763,7 +805,10 @@ class _TasksTabState extends State<TasksTab> {
                     top: 8,
                     right: 8,
                     child: PopupMenuButton<String>(
-                      icon: const Icon(Icons.more_vert, color: Colors.white70),
+                      icon: Icon(
+                        Icons.more_vert,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
                       onSelected: (v) {
                         if (v == 'edit') {
                           _showEditProjectDialog(project);
@@ -796,13 +841,15 @@ class _TasksTabState extends State<TasksTab> {
         final tasks = snapshot.data!;
 
         if (tasks.isEmpty) {
-          return const GlassContainer(
+          return GlassContainer(
             width: double.infinity,
-            padding: EdgeInsets.all(24),
+            padding: const EdgeInsets.all(24),
             child: Center(
               child: Text(
                 'All caught up!',
-                style: TextStyle(color: Colors.white24),
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
               ),
             ),
           );
@@ -822,19 +869,31 @@ class _TasksTabState extends State<TasksTab> {
                 final confirmed = await showDialog<bool>(
                   context: context,
                   builder: (context) => AlertDialog(
-                    backgroundColor: const Color(0xFF1E1E1E),
-                    title: const Text(
+                    backgroundColor:
+                        Theme.of(context).dialogTheme.backgroundColor ??
+                        Theme.of(context).colorScheme.surface,
+                    title: Text(
                       'Delete Task',
-                      style: TextStyle(color: Colors.white),
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurface,
+                      ),
                     ),
                     content: Text(
                       'Delete "${task.title}"?',
-                      style: const TextStyle(color: Colors.white70),
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
                     ),
                     actions: [
                       TextButton(
                         onPressed: () => Navigator.pop(context, false),
-                        child: const Text('Cancel'),
+                        child: Text(
+                          'Cancel',
+                          style: TextStyle(
+                            color:
+                                Theme.of(context).colorScheme.onSurfaceVariant,
+                          ),
+                        ),
                       ),
                       TextButton(
                         onPressed: () => Navigator.pop(context, true),
@@ -884,8 +943,8 @@ class _TasksTabState extends State<TasksTab> {
                     task.title,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Colors.white,
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurface,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -922,9 +981,9 @@ class _TasksTabState extends State<TasksTab> {
                         },
                       ),
                       PopupMenuButton<String>(
-                        icon: const Icon(
+                        icon: Icon(
                           Icons.more_vert,
-                          color: Colors.white70,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
                         ),
                         onSelected: (v) {
                           if (v == 'edit') {

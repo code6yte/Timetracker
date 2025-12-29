@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:share_plus/share_plus.dart';
 import '../auth_service.dart';
 import '../theme_controller.dart';
 import '../widgets/glass_container.dart';
@@ -61,7 +62,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
         content: TextField(
           controller: nameController,
-          style: const TextStyle(color: Colors.white),
+          style: TextStyle(color: Theme.of(context).colorScheme.onSurface),
           decoration: const InputDecoration(labelText: 'Display Name'),
         ),
         actions: [
@@ -347,6 +348,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
     );
     if (confirmed == true) {
+      if (!mounted) return;
       final messenger = ScaffoldMessenger.of(context);
       try {
         await _trackerService.deleteProject(cat.id);
@@ -472,7 +474,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   return Center(
                     child: Text(
                       'Error loading goal: ${snapshot.error}',
-                      style: TextStyle(color: Theme.of(context).colorScheme.error),
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.error,
+                      ),
                     ),
                   );
                 }
@@ -694,6 +698,57 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ),
 
+            const SizedBox(height: 24),
+
+            // Data Section
+            Text(
+              'Data',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 12),
+            GlassContainer(
+              padding: const EdgeInsets.all(8),
+              child: Column(
+                children: [
+                  ListTile(
+                    leading: const Icon(
+                      Icons.download,
+                      color: Colors.blueAccent,
+                    ),
+                    title: const Text('Export Data (CSV)'),
+                    subtitle: Text(
+                      'Export tracked entries as CSV',
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                    onTap: () async {
+                      final messenger = ScaffoldMessenger.of(context);
+                      try {
+                        final path = await _trackerService.exportToCSV();
+                        await Share.shareXFiles([
+                          XFile(path),
+                        ], text: 'Time Tracker Export');
+                        if (mounted) {
+                          messenger.showSnackBar(
+                            SnackBar(content: Text('Exported to $path')),
+                          );
+                        }
+                      } catch (e) {
+                        messenger.showSnackBar(
+                          SnackBar(content: Text('Export failed: $e')),
+                        );
+                      }
+                    },
+                  ),
+                ],
+              ),
+            ),
+
             // Account Section
             Text(
               'Account',
@@ -748,7 +803,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               onPressed: () => nav.pop(false),
                               child: Text(
                                 'Cancel',
-                                style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
+                                style: TextStyle(
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.onSurfaceVariant,
+                                ),
                               ),
                             ),
                             TextButton(
