@@ -6,6 +6,7 @@ import '../widgets/glass_container.dart';
 import '../login_page.dart';
 import '../services/time_tracker_service.dart';
 import '../utils/ui_helpers.dart';
+import '../models/time_entry.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -39,10 +40,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
   // Profile editing dialog
   void _showProfileDialog() {
     final user = AuthService().currentUser;
-    if (user == null) {
+    if (user == null || user.isAnonymous) {
       AppUI.showSnackBar(
         context, 
-        'No user signed in', 
+        user == null ? 'No user signed in' : 'Profile editing is not available for guests', 
         type: SnackBarType.warning
       );
       return;
@@ -186,20 +187,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   radius: 22,
                   backgroundColor: Theme.of(context).colorScheme.primary,
                   child: Text(
-                    (AuthService().currentUser?.displayName ??
-                                AuthService().currentUser?.email ??
-                                'P')
-                            .toString()
-                            .trim()
-                            .isNotEmpty
-                        ? (AuthService().currentUser?.displayName ??
-                                  AuthService().currentUser?.email ??
-                                  'P')
-                              .toString()
-                              .trim()
-                              .substring(0, 1)
-                              .toUpperCase()
-                        : 'P',
+                    (AuthService().currentUser?.isAnonymous ?? false)
+                        ? 'G'
+                        : (AuthService().currentUser?.displayName ??
+                                    AuthService().currentUser?.email ??
+                                    'P')
+                                .toString()
+                                .trim()
+                                .isNotEmpty
+                            ? (AuthService().currentUser?.displayName ??
+                                      AuthService().currentUser?.email ??
+                                      'P')
+                                  .toString()
+                                  .trim()
+                                  .substring(0, 1)
+                                  .toUpperCase()
+                            : 'P',
                     style: const TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.bold,
@@ -207,9 +210,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                 ),
                 title: Text(
-                  AuthService().currentUser?.displayName ??
-                      AuthService().currentUser?.email ??
-                      'Your Profile',
+                  (AuthService().currentUser?.isAnonymous ?? false)
+                      ? 'Guest User'
+                      : AuthService().currentUser?.displayName ??
+                          AuthService().currentUser?.email ??
+                          'Your Profile',
                   style: TextStyle(
                     color: Theme.of(context).brightness == Brightness.light
                         ? Colors.black
@@ -218,7 +223,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                 ),
                 subtitle: Text(
-                  AuthService().currentUser?.email ?? '',
+                  (AuthService().currentUser?.isAnonymous ?? false)
+                      ? 'Limited Access'
+                      : AuthService().currentUser?.email ?? '',
                   style: TextStyle(
                     color: Theme.of(context).colorScheme.onSurfaceVariant,
                   ),
@@ -472,48 +479,76 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ),
             const SizedBox(height: 12),
-            GlassContainer(
-              padding: const EdgeInsets.all(12),
-              child: Column(
-                children: [
-                  ListTile(
-                    dense: true,
-                    leading: const Icon(Icons.logout, color: Colors.redAccent),
-                    title: const Text(
-                      'Logout',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: Colors.redAccent,
-                        fontWeight: FontWeight.bold,
+            StreamBuilder<bool>(
+              stream: Stream.fromFuture(_trackerService.hasRunningTimer()),
+              builder: (context, snapshot) {
+                // We use a StreamBuilder but since hasRunningTimer is a Future, 
+                // we should actually use a proper stream or just check once.
+                // However, to keep it simple and reactive to the service, 
+                // let's check if the user can logout.
+                return GlassContainer(
+                  padding: const EdgeInsets.all(12),
+                  child: Column(
+                    children: [
+                      StreamBuilder<TimeEntry?>(
+                        stream: _trackerService.getRunningTimer(),
+                        builder: (context, timerSnap) {
+                          final isRunning = timerSnap.hasData && timerSnap.data != null;
+                          if (isRunning) {
+                            return Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 8.0),
+                              child: Text(
+                                'Finish your active timer to logout',
+                                style: TextStyle(
+                                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                  fontSize: 12,
+                                  fontStyle: FontStyle.italic,
+                                ),
+                              ),
+                            );
+                          }
+                          return ListTile(
+                            dense: true,
+                            leading: const Icon(Icons.logout, color: Colors.redAccent),
+                            title: const Text(
+                              'Logout',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: Colors.redAccent,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            onTap: () async {
+                              final buildContext = context;
+                              final nav = Navigator.of(buildContext);
+                              final confirmed = await AppUI.showConfirmDialog(
+                                buildContext,
+                                title: 'Confirm Logout',
+                                body: 'Are you sure you want to logout?',
+                                confirmLabel: 'Logout',
+                                confirmColor: Colors.redAccent,
+                              );
+                              
+                              if (confirmed) {
+                                if (!mounted) return;
+                                await AuthService().logout();
+                                if (!mounted) {
+                                  return;
+                                }
+                                nav.pushAndRemoveUntil(
+                                  MaterialPageRoute(builder: (_) => const LoginPage()),
+                                  (route) => false,
+                                );
+                              }
+                            },
+                          );
+                        },
                       ),
-                    ),
-                    onTap: () async {
-                      final buildContext = context;
-                      final nav = Navigator.of(buildContext);
-                      final confirmed = await AppUI.showConfirmDialog(
-                        buildContext,
-                        title: 'Confirm Logout',
-                        body: 'Are you sure you want to logout?',
-                        confirmLabel: 'Logout',
-                        confirmColor: Colors.redAccent,
-                      );
-                      
-                      if (confirmed) {
-                        if (!mounted) return;
-                        await AuthService().logout();
-                        if (!mounted) {
-                          return;
-                        }
-                        nav.pushAndRemoveUntil(
-                          MaterialPageRoute(builder: (_) => const LoginPage()),
-                          (route) => false,
-                        );
-                      }
-                    },
+                    ],
                   ),
-                ],
-              ),
+                );
+              },
             ),
           ],
         ),

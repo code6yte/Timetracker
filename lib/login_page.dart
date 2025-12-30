@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'auth_service.dart';
-import 'screens/home_screen.dart';
 import 'widgets/glass_container.dart';
 import 'utils/ui_helpers.dart';
 
@@ -136,7 +135,7 @@ class _LoginPageState extends State<LoginPage> {
     }
 
     // Email format validation
-    final emailRegex = RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$');
+    final emailRegex = RegExp(r"^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,253}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,253}[a-zA-Z0-9])?)*$");
     if (!emailRegex.hasMatch(email)) {
       AppUI.showSnackBar(
         context, 
@@ -144,6 +143,24 @@ class _LoginPageState extends State<LoginPage> {
         type: SnackBarType.warning,
       );
       return;
+    }
+
+    // Dummy/Placeholder email check for Sign Up
+    if (isSignUp) {
+      final dummyDomains = [
+        'example.com', 'test.com', 'mailinator.com', 'yopmail.com', 
+        'tempmail.com', 'guerrillamail.com', '10minutemail.com',
+        'trashmail.com', 'dispostable.com'
+      ];
+      final domain = email.split('@').last.toLowerCase();
+      if (dummyDomains.contains(domain) || email.startsWith('test@') || email.startsWith('example@')) {
+        AppUI.showSnackBar(
+          context, 
+          'Disposable or placeholder emails are not allowed',
+          type: SnackBarType.warning,
+        );
+        return;
+      }
     }
 
     // Password length validation
@@ -158,35 +175,36 @@ class _LoginPageState extends State<LoginPage> {
 
     setState(() => isLoading = true);
 
-    final nav = Navigator.of(context);
-    
     String? error;
     if (isSignUp) {
       error = await _authService.signUp(email, password);
+      if (error != null && error.contains('already-in-use')) {
+        error = 'This email is already registered. Please login instead.';
+      } else if (error == null) {
+        // Send verification email on signup
+        await _authService.sendEmailVerification();
+      }
     } else {
       error = await _authService.login(email, password);
     }
 
     setState(() => isLoading = false);
+  }
+
+  Future<void> _handleGuestSignIn() async {
+    setState(() => isLoading = true);
+    final error = await _authService.signInAsGuest();
+    setState(() => isLoading = false);
 
     if (!mounted) return;
 
-    if (error == null) {
-      // Navigate to Home page
-      nav.pushReplacement(MaterialPageRoute(builder: (_) => HomeScreen()));
-    } else {
-      AppUI.showSnackBar(
-        context, 
-        error,
-        type: SnackBarType.error,
-      );
+    if (error != null) {
+      AppUI.showSnackBar(context, error, type: SnackBarType.error);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
     return GlassScaffold(
       body: Center(
         child: SingleChildScrollView(
@@ -398,6 +416,18 @@ class _LoginPageState extends State<LoginPage> {
                     ),
                   ),
                 ],
+              ),
+              const SizedBox(height: 16),
+              TextButton.icon(
+                onPressed: isLoading ? null : _handleGuestSignIn,
+                icon: const Icon(Icons.person_outline),
+                label: const Text(
+                  'Continue as Guest',
+                  style: TextStyle(fontSize: 16),
+                ),
+                style: TextButton.styleFrom(
+                  foregroundColor: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
+                ),
               ),
             ],
           ),

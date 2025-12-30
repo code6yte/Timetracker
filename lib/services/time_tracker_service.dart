@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:csv/csv.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:hive/hive.dart';
 import 'dart:async';
 import 'dart:io';
 import '../models/task.dart';
@@ -10,11 +11,13 @@ import '../models/time_entry.dart';
 import '../models/category.dart';
 import '../models/project.dart';
 import 'local_data_service.dart';
+import '../auth_service.dart';
 
 class TimeTrackerService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final LocalDataService _localData = LocalDataService();
+  final AuthService _authService = AuthService();
 
   // Singleton
   static final TimeTrackerService _instance = TimeTrackerService._internal();
@@ -23,7 +26,7 @@ class TimeTrackerService {
     // Initialize sync when service is created (or on first access)
     // We can also trigger this manually on auth state change
     _auth.authStateChanges().listen((user) {
-      if (user != null) {
+      if (user != null && !_authService.isGuest) {
         _startSync();
       } else {
         _stopSync();
@@ -35,10 +38,12 @@ class TimeTrackerService {
   StreamSubscription? _taskSub;
   StreamSubscription? _entrySub;
 
-  String get userId => _auth.currentUser?.uid ?? '';
+  String get userId => _auth.currentUser?.uid ?? (_authService.isGuest ? 'guest_user' : '');
+
+  bool get isGuest => _authService.isGuest;
 
   void _startSync() {
-    if (userId.isEmpty) return;
+    if (userId.isEmpty || isGuest) return;
 
     // Sync Projects
     _projectSub?.cancel();
@@ -85,18 +90,34 @@ class TimeTrackerService {
     _projectSub?.cancel();
     _taskSub?.cancel();
     _entrySub?.cancel();
-    _localData.clearAll();
+    if (!isGuest) {
+      _localData.clearAll();
+    }
   }
 
   // ========== PROJECT OPERATIONS ==========
 
-  Future<void> createProject(String name, String color) async {
-    await _firestore.collection('projects').add({
-      'userId': userId,
-      'name': name,
-      'color': color,
-      'createdAt': DateTime.now().millisecondsSinceEpoch,
-    });
+  Future<void> createProject(String name, String color, {String description = ''}) async {
+    final createdAt = DateTime.now().millisecondsSinceEpoch;
+    if (!isGuest) {
+      await _firestore.collection('projects').add({
+        'userId': userId,
+        'name': name,
+        'description': description,
+        'color': color,
+        'createdAt': createdAt,
+      });
+    } else {
+      final id = createdAt.toString();
+      await _localData.saveProject(Project(
+        id: id,
+        userId: userId,
+        name: name,
+        color: color,
+        description: description,
+        createdAt: createdAt,
+      ));
+    }
   }
 
   Stream<List<Project>> getProjects() {
@@ -105,16 +126,30 @@ class TimeTrackerService {
   }
 
   Future<void> deleteProject(String id) async {
-    await _firestore.collection('projects').doc(id).delete();
-    await _localData.deleteProject(id); // Optimistic update
+    if (!isGuest) {
+      await _firestore.collection('projects').doc(id).delete();
+    }
+    await _localData.deleteProject(id);
   }
 
-  Future<void> updateProject(String id, String name, String color) async {
-    await _firestore.collection('projects').doc(id).update({
-      'name': name,
-      'color': color,
-    });
-    // Optimistic update logic could go here, but listener usually catches it fast enough
+  Future<void> updateProject(String id, String name, String color, {String description = ''}) async {
+    if (!isGuest) {
+      await _firestore.collection('projects').doc(id).update({
+        'name': name,
+        'description': description,
+        'color': color,
+      });
+    } else {
+      final old = _localData.getProjects().firstWhere((p) => p.id == id);
+      await _localData.saveProject(Project(
+        id: id,
+        userId: old.userId,
+        name: name,
+        color: color,
+        description: description,
+        createdAt: old.createdAt,
+      ));
+    }
   }
 
   Stream<List<Category>> getCategories() {
@@ -124,7 +159,6 @@ class TimeTrackerService {
           .map(
             (p) => Category(
               id: p.id,
-              userId: userId,
               name: p.name,
               color: p.color,
               icon: 'folder',
@@ -137,19 +171,30 @@ class TimeTrackerService {
   // ========== GOAL OPERATIONS ==========
 
   Future<void> setDailyGoal(int seconds) async {
-    await _firestore.collection('user_settings').doc(userId).set({
-      'dailyGoal': seconds,
-    }, SetOptions(merge: true));
+    if (!isGuest) {
+      await _firestore.collection('user_settings').doc(userId).set({
+        'dailyGoal': seconds,
+      }, SetOptions(merge: true));
+    } else {
+      await _settingsBox.put('dailyGoal', seconds);
+    }
   }
 
+  Box get _settingsBox => Hive.box('settings');
+
   Stream<int> getDailyGoal() {
-    // This one is light, keep as is or cache in settings box
-    return _firestore.collection('user_settings').doc(userId).snapshots().map((
-      snapshot,
-    ) {
-      if (!snapshot.exists) return 8 * 3600;
-      return (snapshot.data()?['dailyGoal'] ?? 8 * 3600) as int;
-    });
+    if (!isGuest) {
+      return _firestore.collection('user_settings').doc(userId).snapshots().map((
+        snapshot,
+      ) {
+        if (!snapshot.exists) return 8 * 3600;
+        return (snapshot.data()?['dailyGoal'] ?? 8 * 3600) as int;
+      });
+    } else {
+      return _settingsBox.watch(key: 'dailyGoal').map((event) {
+        return (event.value ?? 8 * 3600) as int;
+      }).startWith((_settingsBox.get('dailyGoal') ?? 8 * 3600) as int);
+    }
   }
 
   // ========== TASK OPERATIONS ==========
@@ -161,16 +206,32 @@ class TimeTrackerService {
     String projectName,
     String color,
   ) async {
-    await _firestore.collection('tasks').add({
-      'userId': userId,
-      'title': title,
-      'description': description,
-      'projectId': projectId,
-      'category': projectName,
-      'color': color,
-      'createdAt': DateTime.now().millisecondsSinceEpoch,
-      'isActive': true,
-    });
+    final createdAt = DateTime.now().millisecondsSinceEpoch;
+    if (!isGuest) {
+      await _firestore.collection('tasks').add({
+        'userId': userId,
+        'title': title,
+        'description': description,
+        'projectId': projectId,
+        'category': projectName,
+        'color': color,
+        'createdAt': createdAt,
+        'isActive': true,
+      });
+    } else {
+      final task = Task(
+        id: createdAt.toString(),
+        userId: userId,
+        title: title,
+        description: description,
+        projectId: projectId,
+        category: projectName,
+        color: color,
+        createdAt: DateTime.fromMillisecondsSinceEpoch(createdAt),
+        isActive: true,
+      );
+      await _localData.saveTask(task);
+    }
   }
 
   // Get active tasks from Hive
@@ -222,24 +283,72 @@ class TimeTrackerService {
     String projectId,
     String projectName,
   ) async {
-    await _firestore.collection('tasks').doc(taskId).update({
-      'title': title,
-      'description': description,
-      'projectId': projectId,
-      'category': projectName,
-    });
+    if (!isGuest) {
+      await _firestore.collection('tasks').doc(taskId).update({
+        'title': title,
+        'description': description,
+        'projectId': projectId,
+        'category': projectName,
+      });
+    } else {
+      final old = _localData.getTasks().firstWhere((t) => t.id == taskId);
+      final task = Task(
+        id: taskId,
+        userId: old.userId,
+        title: title,
+        description: description,
+        projectId: projectId,
+        category: projectName,
+        color: old.color,
+        createdAt: old.createdAt,
+        isActive: old.isActive,
+      );
+      await _localData.saveTask(task);
+    }
   }
 
   Future<void> deleteTask(String taskId) async {
-    await _firestore.collection('tasks').doc(taskId).update({
-      'isActive': false,
-    });
+    if (!isGuest) {
+      await _firestore.collection('tasks').doc(taskId).update({
+        'isActive': false,
+      });
+    } else {
+      final old = _localData.getTasks().firstWhere((t) => t.id == taskId);
+      final task = Task(
+        id: taskId,
+        userId: old.userId,
+        title: old.title,
+        description: old.description,
+        projectId: old.projectId,
+        category: old.category,
+        color: old.color,
+        createdAt: old.createdAt,
+        isActive: false,
+      );
+      await _localData.saveTask(task);
+    }
   }
 
   Future<void> undoDeleteTask(String taskId) async {
-    await _firestore.collection('tasks').doc(taskId).update({
-      'isActive': true,
-    });
+    if (!isGuest) {
+      await _firestore.collection('tasks').doc(taskId).update({
+        'isActive': true,
+      });
+    } else {
+      final old = _localData.getTasks().firstWhere((t) => t.id == taskId);
+      final task = Task(
+        id: taskId,
+        userId: old.userId,
+        title: old.title,
+        description: old.description,
+        projectId: old.projectId,
+        category: old.category,
+        color: old.color,
+        createdAt: old.createdAt,
+        isActive: true,
+      );
+      await _localData.saveTask(task);
+    }
   }
 
   // ========== TIME ENTRY OPERATIONS ==========
@@ -253,79 +362,137 @@ class TimeTrackerService {
   }) async {
     await stopAllRunningTimers();
 
-    final doc = await _firestore.collection('time_entries').add({
-      'userId': userId,
-      'taskId': taskId,
-      'taskTitle': taskTitle,
-      'startTime': DateTime.now().millisecondsSinceEpoch,
-      'endTime': null,
-      'duration': 0,
-      'category': category,
-      'isRunning': true,
-      'expectedDuration': expectedDuration,
-      'source': source,
-    });
-
-    return doc.id;
+    final startTime = DateTime.now();
+    if (!isGuest) {
+      final doc = await _firestore.collection('time_entries').add({
+        'userId': userId,
+        'taskId': taskId,
+        'taskTitle': taskTitle,
+        'startTime': startTime.millisecondsSinceEpoch,
+        'endTime': null,
+        'duration': 0,
+        'category': category,
+        'isRunning': true,
+        'expectedDuration': expectedDuration,
+        'source': source,
+      });
+      return doc.id;
+    } else {
+      final id = startTime.millisecondsSinceEpoch.toString();
+      final entry = TimeEntry(
+        id: id,
+        userId: userId,
+        taskId: taskId,
+        taskTitle: taskTitle,
+        startTime: startTime,
+        category: category,
+        isRunning: true,
+        expectedDuration: expectedDuration,
+        source: source,
+      );
+      await _localData.saveTimeEntry(entry);
+      return id;
+    }
   }
 
   Future<void> stopTimer(String entryId) async {
-    final doc = await _firestore.collection('time_entries').doc(entryId).get();
-    if (!doc.exists) return;
-
-    final data = doc.data()!;
-    final startTime = DateTime.fromMillisecondsSinceEpoch(data['startTime']);
     final endTime = DateTime.now();
-    final duration = endTime.difference(startTime).inSeconds;
+    if (!isGuest) {
+      final doc = await _firestore.collection('time_entries').doc(entryId).get();
+      if (!doc.exists) return;
 
-    await _firestore.collection('time_entries').doc(entryId).update({
-      'endTime': endTime.millisecondsSinceEpoch,
-      'duration': duration,
-      'isRunning': false,
-    });
-  }
-
-  Future<void> stopAllRunningTimers() async {
-    final runningTimers = await _firestore
-        .collection('time_entries')
-        .where('userId', isEqualTo: userId)
-        .where('isRunning', isEqualTo: true)
-        .get();
-
-    if (runningTimers.docs.isEmpty) return;
-
-    final batch = _firestore.batch();
-    final endTime = DateTime.now();
-
-    for (var doc in runningTimers.docs) {
-      final data = doc.data();
+      final data = doc.data()!;
       final startTime = DateTime.fromMillisecondsSinceEpoch(data['startTime']);
       final duration = endTime.difference(startTime).inSeconds;
 
-      batch.update(doc.reference, {
+      await _firestore.collection('time_entries').doc(entryId).update({
         'endTime': endTime.millisecondsSinceEpoch,
         'duration': duration,
         'isRunning': false,
       });
+    } else {
+      final old = _localData.getTimeEntries().firstWhere((e) => e.id == entryId);
+      final duration = endTime.difference(old.startTime).inSeconds;
+      final entry = TimeEntry(
+        id: entryId,
+        userId: old.userId,
+        taskId: old.taskId,
+        taskTitle: old.taskTitle,
+        startTime: old.startTime,
+        endTime: endTime,
+        duration: duration,
+        category: old.category,
+        isRunning: false,
+        expectedDuration: old.expectedDuration,
+        source: old.source,
+      );
+      await _localData.saveTimeEntry(entry);
     }
+  }
 
-    await batch.commit();
+  Future<void> stopAllRunningTimers() async {
+    final endTime = DateTime.now();
+    if (!isGuest) {
+      final runningTimers = await _firestore
+          .collection('time_entries')
+          .where('userId', isEqualTo: userId)
+          .where('isRunning', isEqualTo: true)
+          .get();
+
+      if (runningTimers.docs.isEmpty) return;
+
+      final batch = _firestore.batch();
+
+      for (var doc in runningTimers.docs) {
+        final data = doc.data();
+        final startTime = DateTime.fromMillisecondsSinceEpoch(data['startTime']);
+        final duration = endTime.difference(startTime).inSeconds;
+
+        batch.update(doc.reference, {
+          'endTime': endTime.millisecondsSinceEpoch,
+          'duration': duration,
+          'isRunning': false,
+        });
+      }
+
+      await batch.commit();
+    } else {
+      final running = _localData.getTimeEntries().where((e) => e.isRunning).toList();
+      for (var old in running) {
+        final duration = endTime.difference(old.startTime).inSeconds;
+        final entry = TimeEntry(
+          id: old.id,
+          userId: old.userId,
+          taskId: old.taskId,
+          taskTitle: old.taskTitle,
+          startTime: old.startTime,
+          endTime: endTime,
+          duration: duration,
+          category: old.category,
+          isRunning: false,
+          expectedDuration: old.expectedDuration,
+          source: old.source,
+        );
+        await _localData.saveTimeEntry(entry);
+      }
+    }
   }
 
   Future<bool> hasRunningTimer() async {
-    // Keep this check against Firestore to ensure accuracy across devices
-    final snapshot = await _firestore
-        .collection('time_entries')
-        .where('userId', isEqualTo: userId)
-        .where('isRunning', isEqualTo: true)
-        .limit(1)
-        .get();
-    return snapshot.docs.isNotEmpty;
+    if (!isGuest) {
+      final snapshot = await _firestore
+          .collection('time_entries')
+          .where('userId', isEqualTo: userId)
+          .where('isRunning', isEqualTo: true)
+          .limit(1)
+          .get();
+      return snapshot.docs.isNotEmpty;
+    } else {
+      return _localData.getTimeEntries().any((e) => e.isRunning);
+    }
   }
 
   Stream<TimeEntry?> getRunningTimer() {
-    // This needs real-time accuracy, keep Firestore stream or use filtered Hive stream
-    // Using Hive stream allows for offline support
     return Hive.box('time_entries').watch().map((_) {
       final entries = _localData.getTimeEntries().where((e) => e.isRunning).toList();
       return entries.isNotEmpty ? entries.first : null;
@@ -649,19 +816,35 @@ class TimeTrackerService {
     String category,
     int durationSeconds,
   ) async {
-    await _firestore.collection('time_entries').add({
-      'userId': userId,
-      'taskId': taskId,
-      'taskTitle': taskTitle,
-      'startTime': DateTime.now()
-          .subtract(Duration(seconds: durationSeconds))
-          .millisecondsSinceEpoch,
-      'endTime': DateTime.now().millisecondsSinceEpoch,
-      'duration': durationSeconds,
-      'category': category,
-      'isRunning': false,
-      'source': 'manual_log',
-    });
+    final now = DateTime.now();
+    final startTime = now.subtract(Duration(seconds: durationSeconds));
+    if (!isGuest) {
+      await _firestore.collection('time_entries').add({
+        'userId': userId,
+        'taskId': taskId,
+        'taskTitle': taskTitle,
+        'startTime': startTime.millisecondsSinceEpoch,
+        'endTime': now.millisecondsSinceEpoch,
+        'duration': durationSeconds,
+        'category': category,
+        'isRunning': false,
+        'source': 'manual_log',
+      });
+    } else {
+      final entry = TimeEntry(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        userId: userId,
+        taskId: taskId,
+        taskTitle: taskTitle,
+        startTime: startTime,
+        endTime: now,
+        duration: durationSeconds,
+        category: category,
+        isRunning: false,
+        source: 'manual_log',
+      );
+      await _localData.saveTimeEntry(entry);
+    }
   }
 
   // ========== EXPORT ==========

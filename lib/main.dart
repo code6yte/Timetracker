@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'firebase_options.dart';
 import 'login_page.dart';
 import 'screens/home_screen.dart';
+import 'screens/email_verification_screen.dart';
 import 'theme_controller.dart';
+import 'auth_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -109,20 +110,30 @@ class MyApp extends StatelessWidget {
               contentTextStyle: TextStyle(color: Colors.white70),
             ),
           ),
-          home: StreamBuilder<User?>(
-            stream: FirebaseAuth.instance.authStateChanges(),
+          home: StreamBuilder<bool>(
+            stream: AuthService().sessionStateChanges,
             builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return const Scaffold(
-                  body: Center(child: CircularProgressIndicator()),
-                );
+              final isLoggedIn = snapshot.data ?? false;
+              final auth = AuthService();
+
+              if (!isLoggedIn && !auth.isGuest) {
+                return const LoginPage();
               }
 
-              if (snapshot.hasData && snapshot.data != null) {
-                return HomeScreen();
+              if (auth.isGuest) {
+                return const HomeScreen();
               }
 
-              return LoginPage();
+              final user = auth.currentUser;
+              if (user != null) {
+                if (user.emailVerified) {
+                  return const HomeScreen();
+                } else {
+                  return const EmailVerificationScreen();
+                }
+              }
+
+              return const LoginPage();
             },
           ),
         );

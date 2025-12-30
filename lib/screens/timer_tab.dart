@@ -31,24 +31,40 @@ class _TimerTabState extends State<TimerTab>
   final List<int> _focusDurationOptions = [15, 20, 25, 30, 45, 60];
 
   // Local UI state for focus countdown when expectedDuration is set
-  int _displaySeconds =
-      0; // shows elapsed (stopwatch) or remaining (focus) depending on _runningEntry.expectedDuration
+  int _displaySeconds = 25 * 60; 
   bool get _isRunning => _runningEntry != null;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
+    
+    // Set initial display seconds based on default focus duration
+    _displaySeconds = _selectedFocusDurationMinutes * 60;
 
     // Listen for any running timer persisted in Firestore
     _service.getRunningTimer().listen((entry) {
       if (!mounted) return;
       setState(() {
         _runningEntry = entry;
-        // If a focus session is running, reflect its configured expected duration
-        if (_runningEntry != null && _runningEntry!.expectedDuration != null) {
-          _selectedFocusDurationMinutes =
-              (_runningEntry!.expectedDuration! ~/ 60);
+        if (_runningEntry != null) {
+          final elapsed = DateTime.now().difference(_runningEntry!.startTime).inSeconds;
+          if (_runningEntry!.expectedDuration != null) {
+            _selectedFocusDurationMinutes = (_runningEntry!.expectedDuration! ~/ 60);
+            _displaySeconds = (_runningEntry!.expectedDuration! - elapsed).clamp(
+              0,
+              _runningEntry!.expectedDuration!,
+            );
+          } else {
+            _displaySeconds = elapsed;
+          }
+        } else {
+          // Sync display seconds when timer stops
+          if (_tabController.index == 1) {
+            _displaySeconds = _selectedFocusDurationMinutes * 60;
+          } else {
+            _displaySeconds = 0;
+          }
         }
       });
       _startRunningUpdateTimer();
@@ -76,6 +92,30 @@ class _TimerTabState extends State<TimerTab>
     } catch (_) {
       return Colors.amberAccent;
     }
+  }
+
+  Future<bool> _showNoTaskConfirmation() async {
+    return await showDialog<bool>(
+          context: context,
+          builder:
+              (context) => AlertDialog(
+                title: const Text('No Task Selected'),
+                content: const Text(
+                  'Do you want to start the timer without a specific task?',
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context, false),
+                    child: const Text('Cancel'),
+                  ),
+                  FilledButton(
+                    onPressed: () => Navigator.pop(context, true),
+                    child: const Text('Start'),
+                  ),
+                ],
+              ),
+        ) ??
+        false;
   }
 
   void _startRunningUpdateTimer() {
@@ -109,22 +149,23 @@ class _TimerTabState extends State<TimerTab>
       // Stop persistent running timer
       await _service.stopTimer(_runningEntry!.id);
     } else {
+      String taskId = 'general_task';
+      String taskTitle = 'General Session';
+      String category = 'Uncategorized';
+
       if (_selectedTask == null) {
-        if (!mounted) return;
-        AppUI.showSnackBar(
-          context, 
-          'Select a task first', 
-          type: SnackBarType.warning
-        );
-        return;
+        final confirmed = await _showNoTaskConfirmation();
+        if (!confirmed) return;
+      } else {
+        taskId = _selectedTask!.id;
+        taskTitle = _selectedTask!.title;
+        category =
+            _selectedTask!.projectId.isNotEmpty
+                ? _selectedTask!.projectId
+                : 'Inbox';
       }
-      await _service.startTimer(
-        _selectedTask!.id,
-        _selectedTask!.title,
-        _selectedTask!.projectId.isNotEmpty
-            ? _selectedTask!.projectId
-            : 'Inbox',
-      );
+
+      await _service.startTimer(taskId, taskTitle, category);
     }
   }
 
@@ -133,20 +174,25 @@ class _TimerTabState extends State<TimerTab>
       // Stop focus
       await _service.stopTimer(_runningEntry!.id);
     } else {
+      String taskId = 'general_task';
+      String taskTitle = 'General Session';
+      String category = 'Uncategorized';
+
       if (_focusTask == null) {
-        if (!mounted) return;
-        AppUI.showSnackBar(
-          context, 
-          'Select a task for focus session', 
-          type: SnackBarType.warning
-        );
-        return;
+        final confirmed = await _showNoTaskConfirmation();
+        if (!confirmed) return;
+      } else {
+        taskId = _focusTask!.id;
+        taskTitle = _focusTask!.title;
+        category =
+            _focusTask!.projectId.isNotEmpty ? _focusTask!.projectId : 'Inbox';
       }
+
       // Start focus with chosen expected duration
       await _service.startTimer(
-        _focusTask!.id,
-        _focusTask!.title,
-        _focusTask!.projectId.isNotEmpty ? _focusTask!.projectId : 'Inbox',
+        taskId,
+        taskTitle,
+        category,
         expectedDuration: _selectedFocusDurationMinutes * 60,
         source: 'focus',
       );
@@ -173,6 +219,19 @@ class _TimerTabState extends State<TimerTab>
         );
       }
     }
+  }
+
+  Future<void> _resetTimer() async {
+    if (_isRunning) {
+      await _service.stopTimer(_runningEntry!.id);
+    }
+    setState(() {
+      if (_runningEntry?.expectedDuration != null || _tabController.index == 1) {
+        _displaySeconds = _selectedFocusDurationMinutes * 60;
+      } else {
+        _displaySeconds = 0;
+      }
+    });
   }
 
   @override
@@ -265,12 +324,10 @@ class _TimerTabState extends State<TimerTab>
     if (isRunning && _runningEntry != null) {
       // Try to find the running task in the list
       try {
-        effectiveTask = tasks.firstWhere(
-          (t) => t.id == _runningEntry!.taskId,
-          orElse: () => effectiveTask ?? tasks.first, // Fallback if not found
-        );
+        effectiveTask = tasks.firstWhere((t) => t.id == _runningEntry!.taskId);
       } catch (_) {
-        // Fallback
+        // Not found in list (e.g. 'general_task' or deleted)
+        effectiveTask = null;
       }
     }
 
@@ -372,8 +429,35 @@ class _TimerTabState extends State<TimerTab>
               ),
             ],
             const SizedBox(height: 20),
-            _buildActionButton(isRunning, onToggle, accentColor),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                _buildActionButton(isRunning, onToggle, accentColor),
+                const SizedBox(width: 24),
+                _buildResetButton(accentColor),
+              ],
+            ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildResetButton(Color color) {
+    return GestureDetector(
+      onTap: _resetTimer,
+      child: Container(
+        width: 56,
+        height: 56,
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.1),
+          shape: BoxShape.circle,
+          border: Border.all(color: color.withValues(alpha: 0.3), width: 2),
+        ),
+        child: Icon(
+          Icons.refresh_rounded,
+          size: 28,
+          color: color,
         ),
       ),
     );
@@ -435,9 +519,18 @@ class _TimerTabState extends State<TimerTab>
         child: DropdownButton<Task>(
           value: selectedValue,
           hint: Text(
-            'Select a Task',
+            (_isRunning && _runningEntry?.taskId == 'general_task')
+                ? 'General Session'
+                : 'Select a Task',
             style: TextStyle(
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
+              color:
+                  (_isRunning && _runningEntry?.taskId == 'general_task')
+                      ? Theme.of(context).colorScheme.onSurface
+                      : Theme.of(context).colorScheme.onSurfaceVariant,
+              fontWeight:
+                  (_isRunning && _runningEntry?.taskId == 'general_task')
+                      ? FontWeight.bold
+                      : FontWeight.normal,
             ),
           ),
           dropdownColor: Theme.of(context).colorScheme.surface,
