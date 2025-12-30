@@ -89,6 +89,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _showAddProjectDialog() {
     final TextEditingController nameController = TextEditingController();
+    final TextEditingController descriptionController = TextEditingController();
     String selectedColor = '#FFC107';
 
     AppUI.showAppBottomSheet(
@@ -107,6 +108,31 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               decoration: InputDecoration(
                 labelText: 'Project Name',
+                labelStyle: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderSide: BorderSide(
+                    color: Theme.of(context).colorScheme.onSurface.withAlpha((0.18 * 255).toInt()),
+                  ),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderSide: BorderSide(
+                    color: _safeParseColor(selectedColor),
+                  ),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: descriptionController,
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurface,
+              ),
+              decoration: InputDecoration(
+                labelText: 'Description (Optional)',
                 labelStyle: TextStyle(
                   color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
@@ -203,7 +229,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       if (name.isNotEmpty) {
                         final nav = Navigator.of(context);
                         try {
-                          await _service.createProject(name, selectedColor);
+                          await _service.createProject(name, selectedColor, description: descriptionController.text.trim());
                         } catch (e) {
                           if (!mounted) return;
                           AppUI.showSnackBar(
@@ -229,11 +255,11 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  void _showAddTaskDialog() {
+  void _showAddTaskDialog({Project? initialProject}) {
     final TextEditingController taskController = TextEditingController();
-    String? selectedProjectId;
-    String selectedProjectName = 'Inbox';
-    String selectedColor = '#FFC107';
+    String? selectedProjectId = initialProject?.id ?? '';
+    String selectedProjectName = initialProject?.name ?? 'Inbox';
+    String selectedColor = initialProject?.color ?? '#FFC107';
 
     AppUI.showAppBottomSheet(
       context: context,
@@ -289,7 +315,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ];
                     return DropdownButtonFormField<String>(
-                      initialValue: selectedProjectId ?? '',
+                      initialValue: selectedProjectId,
                       items: items,
                       dropdownColor: Theme.of(context).colorScheme.surface,
                       decoration: InputDecoration(
@@ -314,6 +340,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             (pr) => pr.id == v,
                             orElse: () => Project(
                               id: '',
+                              userId: _service.userId, // Added userId
                               name: 'Inbox',
                               color: '#FFC107',
                               createdAt: DateTime.now().millisecondsSinceEpoch,
@@ -360,14 +387,6 @@ class _HomeScreenState extends State<HomeScreen> {
                           final title = taskController.text.trim();
                           if (title.isEmpty) return;
                           
-                          // Optional: Default to Inbox if no project selected, or handle as error
-                          // keeping original logic: warning if null (though initialValue is '')
-                          // Actually initialValue is '' (Inbox), so selectedProjectId might be '' which is valid for Inbox?
-                          // The original code checked: if (selectedProjectId == null) warning.
-                          // But initialValue is set to '' if selectedProjectId is null.
-                          // Let's stick to original logic but fix the check.
-                          // The dropdown sets selectedProjectId to v.
-                          
                           final nav = Navigator.of(context);
                           try {
                             await _service.createTask(
@@ -402,7 +421,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Future<void> _deleteProject(Project p) async {
+  Future<void> _deleteProjectFromService(Project p) async {
     final confirmed = await AppUI.showConfirmDialog(
       context,
       title: 'Delete Project',
@@ -433,6 +452,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _showEditProjectDialog(Project project) {
     final nameController = TextEditingController(text: project.name);
+    final descriptionController = TextEditingController(text: project.description);
     String selectedColor = project.color;
 
     AppUI.showAppBottomSheet(
@@ -451,6 +471,33 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               decoration: InputDecoration(
                 labelText: 'Project Name',
+                labelStyle: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderSide: BorderSide(
+                    color: Theme.of(context).colorScheme.onSurface.withAlpha(
+                      (0.18 * 255).toInt(),
+                    ),
+                  ),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderSide: BorderSide(
+                    color: _safeParseColor(selectedColor),
+                  ),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: descriptionController,
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurface,
+              ),
+              decoration: InputDecoration(
+                labelText: 'Description (Optional)',
                 labelStyle: TextStyle(
                   color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
@@ -545,6 +592,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           project.id,
                           name,
                           selectedColor,
+                          description: descriptionController.text.trim(),
                         );
                       } catch (e) {
                         if (!mounted) return;
@@ -586,45 +634,50 @@ class _HomeScreenState extends State<HomeScreen> {
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: Stack(
         children: [
-          PageView(
-            controller: _pageController,
-            onPageChanged: (index) {
-              setState(() {
-                _currentIndex = index;
-              });
-            },
-            children: [
-              _buildDashboard(),
-              const TimerTab(),
-              const ReportsScreen(),
-              const SettingsScreen(),
-            ],
-          ),
-          if (_currentIndex == 0)
-            Positioned(
-              bottom: 96,
-              right: 24,
-              child: FloatingActionButton(
-                heroTag: 'add_fab',
-                onPressed: () => _showAddMenu(context),
-                backgroundColor: Theme.of(context).colorScheme.primary,
-                child: const Icon(Icons.add),
-              ),
+          SafeArea(
+            top: true,
+            bottom: false,
+            child: PageView(
+              controller: _pageController,
+              onPageChanged: (index) {
+                setState(() {
+                  _currentIndex = index;
+                });
+              },
+              children: [
+                _buildDashboard(),
+                const TimerTab(),
+                const ReportsScreen(),
+                const SettingsScreen(),
+              ],
             ),
+          ),
+          Positioned(
+            bottom: 96,
+            right: 24,
+            child: _currentIndex == 0 
+              ? FloatingActionButton(
+                  heroTag: 'add_fab',
+                  onPressed: () => _showAddMenu(context),
+                  backgroundColor: Theme.of(context).colorScheme.primary,
+                  child: const Icon(Icons.add),
+                )
+              : const SizedBox.shrink(),
+          ),
           // Persistent running stopwatch stop button (hide for focus sessions)
-          StreamBuilder<TimeEntry?>(
-            stream: _service.getRunningTimer(),
-            builder: (context, snapshot) {
-              final running = snapshot.data;
-              // Do not show stop FAB for focus sessions (sync only with stopwatch)
-              // Also hide if on Dashboard (index 0) or Timer tab (index 1) to avoid duplication
-              if (running == null || running.source == 'focus' || _currentIndex == 0 || _currentIndex == 1) {
-                return const SizedBox.shrink();
-              }
-              return Positioned(
-                bottom: 96,
-                left: 24,
-                child: FloatingActionButton.extended(
+          Positioned(
+            bottom: 96,
+            left: 24,
+            child: StreamBuilder<TimeEntry?>(
+              stream: _service.getRunningTimer(),
+              builder: (context, snapshot) {
+                final running = snapshot.data;
+                // Do not show stop FAB for focus sessions (sync only with stopwatch)
+                // Hide if on Reports (index 2) or Settings (index 3)
+                if (running == null || running.source == 'focus' || _currentIndex == 2 || _currentIndex == 3) {
+                  return const SizedBox.shrink();
+                }
+                return FloatingActionButton.extended(
                   heroTag: 'stop_fab',
                   backgroundColor: Colors.redAccent,
                   icon: const Icon(Icons.stop),
@@ -640,9 +693,9 @@ class _HomeScreenState extends State<HomeScreen> {
                       debugPrint('Failed to stop timer: $e');
                     }
                   },
-                ),
-              );
-            },
+                );
+              },
+            ),
           ),
         ],
       ),
@@ -704,21 +757,21 @@ class _HomeScreenState extends State<HomeScreen> {
     return SingleChildScrollView(
       padding: EdgeInsets.fromLTRB(
         screenWidth * 0.03,
-        8,
+        16,
         screenWidth * 0.03,
-        160,
+        140,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const SizedBox(height: 16),
+          const SizedBox(height: 8),
 
           // Quick stats row
           Row(
             children: [
               Expanded(
                 child: GlassContainer(
-                  padding: const EdgeInsets.all(10),
+                  padding: const EdgeInsets.all(8),
                   child: StreamBuilder<List<TimeEntry>>(
                     stream: _service.getTodayEntries(),
                     builder: (context, snapshot) {
@@ -743,15 +796,15 @@ class _HomeScreenState extends State<HomeScreen> {
                               color: Theme.of(
                                 context,
                               ).colorScheme.onSurfaceVariant,
-                              fontSize: 12,
+                              fontSize: 11,
                             ),
                           ),
-                          const SizedBox(height: 4),
+                          const SizedBox(height: 2),
                           Text(
                             '${hours}h',
                             style: TextStyle(
                               color: Theme.of(context).colorScheme.onSurface,
-                              fontSize: 20,
+                              fontSize: 18,
                               fontWeight: FontWeight.w600,
                             ),
                           ),
@@ -764,7 +817,7 @@ class _HomeScreenState extends State<HomeScreen> {
               const SizedBox(width: 8),
               Expanded(
                 child: GlassContainer(
-                  padding: const EdgeInsets.all(10),
+                  padding: const EdgeInsets.all(8),
                   child: StreamBuilder<List<dynamic>>(
                     stream: _service.getTasks(),
                     builder: (context, snapshot) {
@@ -781,15 +834,15 @@ class _HomeScreenState extends State<HomeScreen> {
                               color: Theme.of(
                                 context,
                               ).colorScheme.onSurfaceVariant,
-                              fontSize: 12,
+                              fontSize: 11,
                             ),
                           ),
-                          const SizedBox(height: 4),
+                          const SizedBox(height: 2),
                           Text(
                             '${tasks.length}',
                             style: TextStyle(
                               color: Theme.of(context).colorScheme.onSurface,
-                              fontSize: 20,
+                              fontSize: 18,
                               fontWeight: FontWeight.w600,
                             ),
                           ),
@@ -802,16 +855,16 @@ class _HomeScreenState extends State<HomeScreen> {
             ],
           ),
 
-          const SizedBox(height: 24),
+          const SizedBox(height: 16),
           Text(
             'Activity',
             style: TextStyle(
-              fontSize: 18,
+              fontSize: 16,
               fontWeight: FontWeight.bold,
               color: Theme.of(context).colorScheme.onSurface,
             ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 8),
 
           StreamBuilder<List<Project>>(
             stream: _service.getProjects(),
@@ -858,77 +911,150 @@ class _HomeScreenState extends State<HomeScreen> {
 
     if (id == 'inbox' && tasks.isEmpty) return const SizedBox.shrink();
 
-    return GlassContainer(
-      margin: const EdgeInsets.only(bottom: 8),
-      borderRadius: BorderRadius.circular(16),
-      color: color,
-      opacity: 0.08,
-      child: Column(
-        children: [
-          ListTile(
-            dense: true,
-            visualDensity: VisualDensity.compact,
-            leading: Icon(
-              project != null ? Icons.folder_rounded : Icons.inbox_rounded,
-              color: color,
-              size: 20,
-            ),
-            title: Text(
-              name,
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 14,
-                color: Theme.of(context).colorScheme.onSurface,
+    return Dismissible(
+      key: Key('project_$id'),
+      direction: project != null ? DismissDirection.horizontal : DismissDirection.none,
+      background: Container(
+        alignment: Alignment.centerLeft,
+        padding: const EdgeInsets.only(left: 20),
+        margin: const EdgeInsets.only(bottom: 8),
+        decoration: BoxDecoration(
+          color: Colors.blueAccent.withOpacity(0.8),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: const Icon(Icons.edit, color: Colors.white),
+      ),
+      secondaryBackground: Container(
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.only(right: 20),
+        margin: const EdgeInsets.only(bottom: 8),
+        decoration: BoxDecoration(
+          color: Colors.redAccent.withOpacity(0.8),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: const Icon(Icons.delete, color: Colors.white),
+      ),
+      confirmDismiss: (direction) async {
+        if (project != null) {
+          if (direction == DismissDirection.startToEnd) {
+            _showEditProjectDialog(project);
+            return false;
+          } else {
+            final confirmed = await AppUI.showConfirmDialog(
+              context,
+              title: 'Delete Project',
+              body: 'Delete "${project.name}"? This will not delete tasks automatically.',
+              confirmLabel: 'Delete',
+              confirmColor: Colors.redAccent,
+            );
+            return confirmed;
+          }
+        }
+        return false;
+      },
+      onDismissed: (direction) {
+        if (direction == DismissDirection.endToStart && project != null) {
+          _service.deleteProject(project.id);
+        }
+      },
+      child: GlassContainer(
+        margin: const EdgeInsets.only(bottom: 6),
+        borderRadius: BorderRadius.circular(12),
+        color: color,
+        opacity: 0.08,
+        child: Column(
+          children: [
+            ListTile(
+              dense: true,
+              visualDensity: VisualDensity.compact,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+              leading: Icon(
+                project != null ? Icons.folder_rounded : Icons.inbox_rounded,
+                color: color,
+                size: 18,
               ),
-            ),
-            trailing: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  '${tasks.length}',
-                  style: TextStyle(
-                    fontSize: 12,
+              title: Text(
+                name,
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 14,
+                  color: Theme.of(context).colorScheme.onSurface,
+                ),
+              ),
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                    icon: Icon(
+                      Icons.add_circle_outline_rounded,
+                      size: 18,
+                      color: color,
+                    ),
+                    onPressed: () => _showAddTaskDialog(initialProject: project),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    '${tasks.length}',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  Icon(
+                    isExpanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
+                    size: 18,
                     color: Theme.of(context).colorScheme.onSurfaceVariant,
                   ),
-                ),
-                const SizedBox(width: 4),
-                Icon(
-                  isExpanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
-                  size: 18,
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
-              ],
-            ),
-            onTap: () {
-              setState(() {
-                _expandedProjectId = isExpanded ? null : id;
-              });
-            },
-          ),
-          if (isExpanded)
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-              child: tasks.isEmpty
-                  ? Text(
-                      'No tasks',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
-                    )
-                  : ListView.separated(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      itemCount: tasks.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 4),
-                      itemBuilder: (context, index) {
-                        final t = tasks[index];
-                        return _buildCompactTaskItem(t, color);
-                      },
+                ],
+              ),
+              onTap: () {
+                setState(() {
+                  _expandedProjectId = isExpanded ? null : id;
+                });
+              },
+              onLongPress: () {
+                if (project != null) {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => ProjectDetailsScreen(project: project),
                     ),
+                  );
+                }
+              },
             ),
-        ],
+            if (isExpanded)
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                padding: const EdgeInsets.only(bottom: 4),
+                child: tasks.isEmpty
+                    ? Padding(
+                        padding: const EdgeInsets.all(8.0),
+                        child: Text(
+                          'No tasks',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      )
+                    : ListView.separated(
+                        shrinkWrap: true,
+                        padding: EdgeInsets.zero,
+                        physics: const NeverScrollableScrollPhysics(),
+                        itemCount: tasks.length,
+                        separatorBuilder: (_, __) => const Divider(height: 1, indent: 12, endIndent: 12, thickness: 0.5, color: Colors.white10),
+                        itemBuilder: (context, index) {
+                          final t = tasks[index];
+                          return _buildCompactTaskItem(t, color);
+                        },
+                      ),
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -939,67 +1065,102 @@ class _HomeScreenState extends State<HomeScreen> {
       builder: (context, snap) {
         final isRunning = snap.data?.taskId == t.id;
         
-        return GlassContainer(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-          borderRadius: BorderRadius.circular(10),
-          color: projectColor,
-          opacity: 0.05,
-          child: Row(
-            children: [
-              Container(
-                width: 3,
-                height: 16,
-                decoration: BoxDecoration(
-                  color: projectColor,
-                  borderRadius: BorderRadius.circular(2),
-                ),
+        return Dismissible(
+          key: Key('task_${t.id}'),
+          direction: DismissDirection.horizontal,
+          background: Container(
+            alignment: Alignment.centerLeft,
+            padding: const EdgeInsets.only(left: 20),
+            decoration: BoxDecoration(
+              color: Colors.blueAccent.withOpacity(0.8),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Icon(Icons.edit, color: Colors.white),
+          ),
+          secondaryBackground: Container(
+            alignment: Alignment.centerRight,
+            padding: const EdgeInsets.only(right: 20),
+            decoration: BoxDecoration(
+              color: Colors.redAccent.withOpacity(0.8),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Icon(Icons.delete, color: Colors.white),
+          ),
+          confirmDismiss: (direction) async {
+            if (direction == DismissDirection.startToEnd) {
+              _showEditTaskDialog(t);
+              return false; // Don't dismiss for edit
+            } else {
+              final confirmed = await AppUI.showConfirmDialog(
+                context,
+                title: 'Delete Task',
+                body: 'Delete "${t.title}"?',
+                confirmLabel: 'Delete',
+                confirmColor: Colors.redAccent,
+              );
+              return confirmed;
+            }
+          },
+          onDismissed: (direction) {
+            if (direction == DismissDirection.endToStart) {
+              _service.deleteTask(t.id);
+            }
+          },
+          child: ListTile(
+            dense: true,
+            visualDensity: VisualDensity.compact,
+            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+            leading: Container(
+              width: 2,
+              height: 14,
+              decoration: BoxDecoration(
+                color: projectColor.withOpacity(0.5),
+                borderRadius: BorderRadius.circular(1),
               ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  t.title,
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: Theme.of(context).colorScheme.onSurface,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
+            ),
+            title: Text(
+              t.title,
+              style: TextStyle(
+                fontSize: 13,
+                color: Theme.of(context).colorScheme.onSurface,
               ),
-              IconButton(
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(),
-                icon: Icon(
-                  isRunning ? Icons.stop_circle : Icons.play_arrow_rounded,
-                  color: isRunning ? Colors.redAccent : Colors.amberAccent,
-                  size: 22,
-                ),
-                onPressed: () async {
-                  if (isRunning) {
-                    await _service.stopTimer(snap.data!.id);
-                  } else {
-                    final hasRunning = await _service.hasRunningTimer();
-                    if (hasRunning) {
-                      if (!mounted) return;
-                      final shouldStart = await AppUI.showConfirmDialog(
-                        context,
-                        title: 'Timer Running',
-                        body: 'Stop current timer and start this one?',
-                        confirmLabel: 'Start',
-                        confirmColor: Colors.amber,
-                      );
-                      if (!shouldStart) return;
-                    }
-                    await _service.startTimer(t.id, t.title, t.category);
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            trailing: IconButton(
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
+              icon: Icon(
+                isRunning ? Icons.stop_circle : Icons.play_arrow_rounded,
+                color: isRunning ? Colors.redAccent : Colors.amberAccent,
+                size: 20,
+              ),
+              onPressed: () async {
+                if (isRunning) {
+                  await _service.stopTimer(snap.data!.id);
+                } else {
+                  final hasRunning = await _service.hasRunningTimer();
+                  if (hasRunning) {
+                    if (!mounted) return;
+                    final shouldStart = await AppUI.showConfirmDialog(
+                      context,
+                      title: 'Timer Running',
+                      body: 'Stop current timer and start this one?',
+                      confirmLabel: 'Start',
+                      confirmColor: Colors.amber,
+                    );
+                    if (!shouldStart) return;
                   }
-                },
-              ),
-            ],
+                  await _service.startTimer(t.id, t.title, t.category);
+                }
+              },
+            ),
           ),
         );
       },
     );
   }
+
 
   void _showEditTaskDialog(Task task) {
     final TextEditingController editController = TextEditingController(
@@ -1082,16 +1243,16 @@ class _HomeScreenState extends State<HomeScreen> {
                   onChanged: (v) {
                     setDialogState(() {
                       selectedProjectId = v;
-                      final p = projects.firstWhere(
-                        (pr) => pr.id == v,
-                        orElse: () => Project(
-                          id: '',
-                          name: 'Inbox',
-                          color: '#FFC107',
-                          createdAt: DateTime.now().millisecondsSinceEpoch,
-                        ),
-                      );
-                      selectedProjectName = p.name;
+                                              final p = projects.firstWhere(
+                                                (pr) => pr.id == v,
+                                                orElse: () => Project(
+                                                  id: '',
+                                                  userId: _service.userId, // Added userId
+                                                  name: 'Inbox',
+                                                  color: '#FFC107',
+                                                  createdAt: DateTime.now().millisecondsSinceEpoch,
+                                                ),
+                                              );                      selectedProjectName = p.name;
                     });
                   },
                 );
